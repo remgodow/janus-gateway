@@ -1,0 +1,7 @@
+etc/janus
+usr/bin/janus
+usr/bin/janus-cfgconv
+usr/lib/*/janus/*/libjanus_*.so
+usr/lib/*/janus/*/libjanus_*.so.*
+usr/share/janus/duktape
+usr/share/janus/lua

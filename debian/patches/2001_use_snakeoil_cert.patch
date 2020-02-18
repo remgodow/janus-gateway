@@ -1,0 +1,93 @@
+Description: Use snakeoil certificate by default
+Author: Jonas Smedegaard <dr@jones.dk>
+Last-Update: 2017-03-13
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/conf/janus.jcfg.sample.in
++++ b/conf/janus.jcfg.sample.in
+@@ -124,8 +124,8 @@
+ # connectivity, for the time being, at least until Identity Providers
+ # are standardized and implemented in browsers.
+ certificates: {
+-	#cert_pem = "/path/to/certificate.pem"
+-	#cert_key = "/path/to/key.pem"
++	cert_pem = "/etc/ssl/certs/ssl-cert-snakeoil.pem"
++	cert_key = "/etc/ssl/private/ssl-cert-snakeoil.key"
+ 	#cert_pwd = "secretpassphrase"
+ }
+ 
+--- a/conf/janus.transport.http.jcfg.sample
++++ b/conf/janus.transport.http.jcfg.sample
+@@ -66,8 +66,8 @@
+ # You can also disable insecure protocols and ciphers by configuring the
+ # 'ciphers' property accordingly (no limitation by default).
+ certificates: {
+-	#cert_pem = "/path/to/cert.pem"
+-	#cert_key = "/path/to/key.pem"
++	cert_pem = "/etc/ssl/certs/ssl-cert-snakeoil.pem"
++	cert_key = "/etc/ssl/private/ssl-cert-snakeoil.key"
+ 	#cert_pwd = "secretpassphrase"
+ 	#ciphers = "PFS:-VERS-TLS1.0:-VERS-TLS1.1:-3DES-CBC:-ARCFOUR-128"
+ }
+--- a/conf/janus.transport.websockets.jcfg.sample
++++ b/conf/janus.transport.websockets.jcfg.sample
+@@ -38,7 +38,7 @@
+ 
+ # Certificate and key to use for any secure WebSocket server, if enabled (and passphrase if needed).
+ certificates: {
+-	#cert_pem = "/path/to/cert.pem"
+-	#cert_key = "/path/to/key.pem"
++	cert_pem = "/etc/ssl/certs/ssl-cert-snakeoil.pem"
++	cert_key = "/etc/ssl/private/ssl-cert-snakeoil.key"
+ 	#cert_pwd = "secretpassphrase"
+ }
+--- a/conf/janus.eventhandler.mqttevh.jcfg.sample
++++ b/conf/janus.eventhandler.mqttevh.jcfg.sample
+@@ -42,8 +42,8 @@
+ 
+ 	# Certificates to use when SSL support is enabled, if needed
+ 	#tls_cacert = "/path/to/cacert.pem"
+-	#tls_client_cert = "/path/to/cert.pem"
+-	#tls_client_key = "/path/to/key.pem"
++	tls_client_cert = "/etc/ssl/certs/ssl-cert-snakeoil.pem"
++	tls_client_key = "/etc/ssl/private/ssl-cert-snakeoil.key"
+ 	#tls_ciphers
+ 	#tls_version
+ }
+--- a/conf/janus.eventhandler.rabbitmqevh.jcfg.sample
++++ b/conf/janus.eventhandler.rabbitmqevh.jcfg.sample
+@@ -26,6 +26,6 @@
+ 
+ 	# Certificates to use when SSL support is enabled, if needed
+ 	#ssl_cacert = "/path/to/cacert.pem"
+-	#ssl_cert = "/path/to/cert.pem"
+-	#ssl_key = "/path/to/key.pem"
++	ssl_cert = "/etc/ssl/certs/ssl-cert-snakeoil.pem"
++	ssl_key = "/etc/ssl/private/ssl-cert-snakeoil.key"
+ }
+--- a/conf/janus.transport.mqtt.jcfg.sample
++++ b/conf/janus.transport.mqtt.jcfg.sample
+@@ -23,8 +23,8 @@
+ 
+ 	# Certificates to use when SSL support is enabled, if needed
+ 	#cacertfile = /path/to/cacert.pem
+-	#certfile = /path/to/cert.pem
+-	#keyfile = /path/to/key.pem
++	certfile = /etc/ssl/certs/ssl-cert-snakeoil.pem
++	keyfile = /etc/ssl/private/ssl-cert-snakeoil.key
+ 
+ }
+ 
+--- a/conf/janus.transport.rabbitmq.jcfg.sample
++++ b/conf/janus.transport.rabbitmq.jcfg.sample
+@@ -32,8 +32,8 @@
+ 
+ 	# Certificates to use when SSL support is enabled, if needed
+ 	#ssl_cacert = "/path/to/cacert.pem"
+-	#ssl_cert = "/path/to/cert.pem"
+-	#ssl_key = "/path/to/key.pem"
++	ssl_cert = "/etc/ssl/certs/ssl-cert-snakeoil.pem"
++	ssl_key = "/etc/ssl/private/ssl-cert-snakeoil.key"
+ }
+ 
+ # If you want to expose the Admin API via RabbitMQ as well, you need to

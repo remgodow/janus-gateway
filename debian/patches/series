@@ -1,0 +1,7 @@
+1001_try_enable_docs_by_default.patch
+2001_use_snakeoil_cert.patch
+2002_force_tolerate_recent_doxygen.patch
+2003_use_packaged_javascript.patch
+2004_avoid_stun_privacy_breach.patch
+2005_avoid_npm.patch
+2006_avoid_doc_privacy_breach.patch

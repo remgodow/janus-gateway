@@ -1,0 +1,4 @@
+  * Package javascript libraries (and move package janus-demos to main):
+    + Blueimp-md5
+  * Configure with --enable-mqtt.
+    Build-depend on paho.mqtt-dev.

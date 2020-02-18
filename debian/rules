@@ -1,0 +1,66 @@
+#!/usr/bin/make -f
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+DPKG_EXPORT_BUILDFLAGS = 1
+include /usr/share/dpkg/buildflags.mk
+
+# generate documentation unless nodoc requested
+ifeq (,$(filter nodoc,$(DEB_BUILD_OPTIONS)))
+DOCS = README.html README.txt
+endif
+
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		--enable-systemd-sockets \
+		--enable-nanomsg \
+		--enable-plugin-lua \
+		--enable-plugin-duktape \
+		--enable-post-processing
+
+override_dh_auto_build-arch: $(DOCS)
+	dh_auto_build
+
+override_dh_auto_build-indep: debian/js/janus.min.js.gz $(DOCS)
+	dh_auto_build -- docs
+
+override_dh_install:
+	rename 's/\.sample$$//' debian/tmp/etc/janus/*.sample
+	rm -f debian/tmp/usr/share/janus/streams/test_*
+	dh_install
+
+override_dh_installdocs:
+	dh_installdocs --all -- $(DOCS)
+
+override_dh_auto_clean:
+	dh_auto_clean
+
+# use staging dir for browser library (easier to install and clean)
+debian/js/janus.js:
+	cd npm && rollup --config rollup.config.js \
+		--sourcemap inline \
+		--output.format umd \
+		--output.file ../$@
+
+# optimize JavaScript for browser use
+# * include source-map
+%.min.js: %.js
+	uglifyjs.terser --compress --mangle \
+		--source-map "base='$(abspath $(dir $@))',url='$(notdir $@).map'" \
+		--output $@ \
+		-- $<
+
+# pre-compress for browser use
+%.gz: %
+	pigz --force --keep -11 -- $<
+	brotli --force --keep --best -- $<
+
+%.html: %.md
+	pandoc --from gfm-raw_html --to html --standalone --output $@ $<
+
+%.txt: %.md
+	pandoc --from gfm-raw_html --to plain --output $@ $<
+
+%:
+	dh $@
+
+.SECONDARY:

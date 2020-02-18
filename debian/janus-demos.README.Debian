@@ -1,0 +1,6 @@
+The Debian packaged Janus deviate from upstream Janus
+in the demo code having no default STUN server,
+to avoid an accidental breach of privacy.
+
+You need to set "iceServers",
+e.g. like documented in comments of /usr/share/janus/demos/echotest.js

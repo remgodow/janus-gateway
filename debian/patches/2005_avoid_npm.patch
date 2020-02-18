@@ -1,0 +1,45 @@
+Description: Avoid npm
+Author: Jonas Smedegaard <dr@jones.dk>
+Last-Update: 2018-09-29
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -591,11 +591,8 @@
+ 
+ if ENABLE_JAVASCRIPT_MODULES
+ 
+-npm/node_modules/rollup/bin/rollup: npm/package.json
+-	cd npm && $(NPM) install && touch node_modules/rollup/bin/rollup
+-
+-npm/bundles/janus.%.js: html/janus.js npm/node_modules/rollup/bin/rollup npm/rollup.config.js npm/module.js
+-	cd npm && $(NPM) run rollup -- --o $(patsubst npm/%,%,$@) --f $*
++npm/bundles/janus.%.js: html/janus.js npm/rollup.config.js npm/module.js
++	cd npm && rollup -c rollup.config.js -o $(patsubst npm/%,%,$@) -f $*
+ 
+ endif
+ 
+--- a/configure.ac
++++ b/configure.ac
+@@ -868,13 +868,6 @@
+     ;;
+ esac
+ 
+-AC_ARG_VAR(NPM,"npm executable to use")
+-AC_PATH_PROG(NPM,npm,,)
+-AM_CONDITIONAL([NPM_FOUND], [test "x$NPM" != "x" ])
+-AM_COND_IF([ENABLE_JAVASCRIPT_MODULES],[
+-    AM_COND_IF([NPM_FOUND],,[AC_MSG_ERROR([npm not found])])
+-])
+-
+ 
+ ##
+ # Post-processing
+@@ -1015,7 +1008,6 @@
+ 	[echo "    MQTT event handler:    no"])
+ AM_COND_IF([ENABLE_JAVASCRIPT_MODULES], [
+ 	echo "JavaScript modules:        yes"
+-	echo "    Using npm:             $NPM"
+ 	AM_COND_IF([ENABLE_JAVASCRIPT_ES_MODULE],
+ 		[echo "    ES syntax:             yes"],
+ 		[echo "    ES syntax:             no"])

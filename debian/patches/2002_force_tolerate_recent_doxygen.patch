@@ -1,0 +1,25 @@
+Description: Tolerate recent doxygen
+ Upstream rejects Doxygen 1.8.11 or newer as reuslts are poor.
+ We have no other Doxygen, and think poor documentation is better than
+ none.
+Author: Jonas Smedegaard <dr@jones.dk>
+Last-Update: 2018-05-07
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/configure.ac
++++ b/configure.ac
+@@ -456,14 +456,6 @@
+         enable_docs=yes
+       ])
+ AM_CONDITIONAL([ENABLE_DOCS], [test "x$enable_docs" = "xyes"])
+-if test "x$enable_docs" = "xyes"; then
+-	doxygen_version=$($DOXYGEN --version)
+-	AS_VERSION_COMPARE([$doxygen_version], [1.8.11],
+-					   [],
+-					   [],
+-					   [AC_MSG_ERROR([Doxygen $doxygen_version too new: versions higher than 1.8.11 are known to render poorly.])]
+-					  )
+-fi
+ 
+ AC_CHECK_PROG([GENGETOPT_CHECK],
+               [gengetopt],

@@ -1,0 +1,17 @@
+Description: Avoid privacy breach of hardcoded default STUN server
+Author: Jonas Smedegaard <dr@jones.dk>
+Bug-Debian: https://bugs.debian.org/867293
+Last-Update: 2018-05-07
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/html/janus.js
++++ b/html/janus.js
+@@ -471,7 +471,7 @@
+ 	}
+ 	var iceServers = gatewayCallbacks.iceServers;
+ 	if(iceServers === undefined || iceServers === null)
+-		iceServers = [{urls: "stun:stun.l.google.com:19302"}];
++		Janus.error("Error: No iceServers defined");
+ 	var iceTransportPolicy = gatewayCallbacks.iceTransportPolicy;
+ 	var bundlePolicy = gatewayCallbacks.bundlePolicy;
+ 	// Whether IPv6 candidates should be gathered
