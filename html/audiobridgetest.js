@@ -78,7 +78,7 @@ $(document).ready(function() {
 				{
 					server: server,
 					success: function() {
-						// Attach to Audio Bridge test plugin
+						// Attach to AudioBridge plugin
 						janus.attach(
 							{
 								plugin: "janus.plugin.audiobridge",

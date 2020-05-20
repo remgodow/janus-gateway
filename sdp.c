@@ -419,13 +419,11 @@ int janus_sdp_process_remote(void *ice_handle, janus_sdp *remote_sdp, gboolean u
 						if(sscanf(a->value, "%d apt=%d", &rtx_ptype, &ptype) != 2) {
 							JANUS_LOG(LOG_ERR, "[%"SCNu64"] Failed to parse fmtp/apt attribute...\n", handle->handle_id);
 						} else {
-							if(janus_is_rfc4588_enabled()) {
-								rtx = TRUE;
-								janus_flags_set(&handle->webrtc_flags, JANUS_HANDLE_WEBRTC_RFC4588_RTX);
-								if(medium->rtx_payload_types == NULL)
-									medium->rtx_payload_types = g_hash_table_new(NULL, NULL);
-								g_hash_table_insert(medium->rtx_payload_types, GINT_TO_POINTER(ptype), GINT_TO_POINTER(rtx_ptype));
-							}
+                            rtx = TRUE;
+                            janus_flags_set(&handle->webrtc_flags, JANUS_HANDLE_WEBRTC_RFC4588_RTX);
+                            if(medium->rtx_payload_types == NULL)
+                                medium->rtx_payload_types = g_hash_table_new(NULL, NULL);
+                            g_hash_table_insert(medium->rtx_payload_types, GINT_TO_POINTER(ptype), GINT_TO_POINTER(rtx_ptype));
 						}
 					}
 				} else if(!strcasecmp(a->name, "rtpmap")) {

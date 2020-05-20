@@ -75,7 +75,7 @@ $(document).ready(function() {
 				{
 					server: server,
 					success: function() {
-						// Attach to Voice Mail test plugin
+						// Attach to VoiceMail plugin
 						janus.attach(
 							{
 								plugin: "janus.plugin.voicemail",

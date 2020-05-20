@@ -78,7 +78,7 @@ $(document).ready(function() {
 				{
 					server: server,
 					success: function() {
-						// Attach to streaming plugin
+						// Attach to Streaming plugin
 						janus.attach(
 							{
 								plugin: "janus.plugin.streaming",

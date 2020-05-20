@@ -78,7 +78,7 @@ $(document).ready(function() {
 				{
 					server: server,
 					success: function() {
-						// Attach to echo test plugin
+						// Attach to SIPre plugin
 						janus.attach(
 							{
 								plugin: "janus.plugin.sipre",
