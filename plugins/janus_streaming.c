@@ -1577,8 +1577,10 @@ int janus_streaming_init(janus_callbacks *callback, const char *config_path) {
 			if(maxport != NULL) {
 				*maxport = '\0';
 				maxport++;
-				rtp_range_min = atoi(range->value);
-				rtp_range_max = atoi(maxport);
+				if(janus_string_to_uint16(range->value, &rtp_range_min) < 0)
+					JANUS_LOG(LOG_WARN, "Invalid RTP min port value: %s (assuming 0)\n", range->value);
+				if(janus_string_to_uint16(maxport, &rtp_range_max) < 0)
+					JANUS_LOG(LOG_WARN, "Invalid RTP max port value: %s (assuming 0)\n", maxport);
 				maxport--;
 				*maxport = '-';
 			}
@@ -1813,13 +1815,21 @@ int janus_streaming_init(janus_callbacks *callback, const char *config_path) {
 						cl = cl->next;
 						continue;
 					}
+				uint16_t audio_port = 0, audio_rtcp_port = 0;
 					if(doaudio &&
-							(aport == NULL || aport->value == NULL || atoi(aport->value) == 0 ||
+						(aport == NULL || aport->value == NULL ||
+						janus_string_to_uint16(aport->value, &audio_port) < 0 || audio_port == 0 ||
 							acodec == NULL || acodec->value == NULL ||
 							artpmap == NULL || artpmap->value == NULL)) {
 						JANUS_LOG(LOG_ERR, "Can't add 'rtp' stream '%s', missing mandatory information for audio...\n", cat->name);
 						cl = cl->next;
 						continue;
+				}
+				if(doaudio && artcpport != NULL && artcpport->value != NULL &&
+						(janus_string_to_uint16(artcpport->value, &audio_rtcp_port) < 0 || audio_rtcp_port == 0)) {
+					JANUS_LOG(LOG_ERR, "Can't add 'rtp' stream '%s', invalid audio RTCP port...\n", cat->name);
+					cl = cl->next;
+					continue;
 					}
 					if(doaudio && aiface) {
 						if(!ifas) {
@@ -1833,19 +1843,23 @@ int janus_streaming_init(janus_callbacks *callback, const char *config_path) {
 							continue;
 						}
 					}
+				uint16_t video_port = 0, video_port2 = 0, video_port3 = 0, video_rtcp_port = 0;
 					if(dovideo &&
-							(vport == NULL || vport->value == NULL || atoi(vport->value) == 0 ||
+						(vport == NULL || vport->value == NULL ||
+						janus_string_to_uint16(vport->value, &video_port) < 0 || video_port == 0 ||
 							vcodec == NULL || vcodec->value == NULL ||
 							vrtpmap == NULL || vrtpmap->value == NULL)) {
 						JANUS_LOG(LOG_ERR, "Can't add 'rtp' stream '%s', missing mandatory information for video...\n", cat->name);
 						cl = cl->next;
 						continue;
 					}
-					if(dodata && (dport == NULL || dport->value == NULL || atoi(dport->value) == 0)) {
-						JANUS_LOG(LOG_ERR, "Can't add 'rtp' stream '%s', missing mandatory information for data...\n", cat->name);
-						cl = cl->next;
-						continue;
-					}
+                    uint16_t data_port = 0;
+                    if(dodata && (dport == NULL || dport->value == NULL ||
+                                  janus_string_to_uint16(dport->value, &data_port) < 0 || data_port == 0)) {
+                        JANUS_LOG(LOG_ERR, "Can't add 'rtp' stream '%s', missing mandatory information for data...\n", cat->name);
+                        cl = cl->next;
+                        continue;
+                    }
 #ifndef HAVE_SCTP
 					if(dodata) {
 						JANUS_LOG(LOG_ERR, "Can't add 'rtp' stream '%s': no datachannels support......\n", cat->name);

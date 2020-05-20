@@ -499,7 +499,11 @@ janus_sdp *janus_sdp_parse(const char *sdp, char *error, size_t errlen) {
 								m->fmts = g_list_append(m->fmts, g_strdup(mline_parts[mindex]));
 								/* Add numeric payload type */
 								int ptype = atoi(mline_parts[mindex]);
-								m->ptypes = g_list_append(m->ptypes, GINT_TO_POINTER(ptype));
+								if(ptype < 0) {
+									JANUS_LOG(LOG_ERR, "Invalid payload type (%s)\n", mline_parts[mindex]);
+								} else {
+									m->ptypes = g_list_append(m->ptypes, GINT_TO_POINTER(ptype));
+								}
 								mindex++;
 							}
 							g_strfreev(mline_parts);
@@ -743,8 +747,11 @@ int janus_sdp_get_codec_pt(janus_sdp *sdp, int index, const char *codec) {
 			janus_sdp_attribute *a = (janus_sdp_attribute *)ma->data;
 			if(a->name != NULL && a->value != NULL && !strcasecmp(a->name, "rtpmap")) {
 				int pt = atoi(a->value);
-				if(strstr(a->value, format) || strstr(a->value, format2))
+				if(pt < 0) {
+					JANUS_LOG(LOG_ERR, "Invalid payload type (%s)\n", a->value);
+				} else if(strstr(a->value, format) || strstr(a->value, format2)) {
 					return pt;
+				}
 			}
 			ma = ma->next;
 		}
@@ -1642,6 +1649,11 @@ int janus_sdp_generate_answer_mline(janus_sdp *offer, janus_sdp *answer, janus_s
 							if(strstr(a->value, extension)) {
 								/* Accept the extension */
 								int id = atoi(a->value);
+								if(id < 0) {
+									JANUS_LOG(LOG_ERR, "Invalid extension ID (%d)\n", id);
+									temp = temp->next;
+									continue;
+								}
 								const char *direction = NULL;
 								switch(a->direction) {
 									case JANUS_SDP_SENDONLY:

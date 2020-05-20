@@ -458,7 +458,9 @@ struct janus_handle_webrtc_medium {
 	GHashTable *rtx_payload_types;
 	/*! \brief RTP payload types for this medium */
 	gint payload_type, rtx_payload_type;
-	/*! \brief Codec used in this medium */
+    /*! \brief Mapping of payload types to their clock rates, as advertised in the SDP */
+    GHashTable *clock_rates;
+    /*! \brief Codec used in this medium */
 	char *codec;
 	/*! \brief Pointer to function to check if a packet is a keyframe (depends on negotiated codec; video only) */
 	gboolean (* video_is_keyframe)(const char* buffer, int len);

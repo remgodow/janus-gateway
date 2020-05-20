@@ -428,6 +428,22 @@ int janus_sdp_process_remote(void *ice_handle, janus_sdp *remote_sdp, gboolean u
 							}
 						}
 					}
+				} else if(!strcasecmp(a->name, "rtpmap")) {
+					if(a->value) {
+						int ptype = atoi(a->value);
+						if(ptype > -1) {
+							char *cr = strchr(a->value, '/');
+							if(cr != NULL) {
+								cr++;
+								uint32_t clock_rate = 0;
+								if(janus_string_to_uint32(cr, &clock_rate) == 0) {
+									if(medium->clock_rates == NULL)
+										medium->clock_rates = g_hash_table_new(NULL, NULL);
+									g_hash_table_insert(medium->clock_rates, GINT_TO_POINTER(ptype), GUINT_TO_POINTER(clock_rate));
+								}
+							}
+						}
+					}
 				}
 #ifdef HAVE_SCTP
 				else if(!strcasecmp(a->name, "sctpmap")) {
@@ -1082,8 +1098,12 @@ int janus_sdp_anonymize(janus_sdp *anon) {
 			janus_sdp_attribute *a = (janus_sdp_attribute *)tempA->data;
 			if(a->value && (strstr(a->value, "red/90000") || strstr(a->value, "ulpfec/90000") || strstr(a->value, "rtx/90000"))) {
 				int ptype = atoi(a->value);
-				JANUS_LOG(LOG_VERB, "Will remove payload type %d (%s)\n", ptype, a->value);
-				purged_ptypes = g_list_append(purged_ptypes, GINT_TO_POINTER(ptype));
+				if(ptype < 0) {
+					JANUS_LOG(LOG_ERR, "Invalid payload type (%d)\n", ptype);
+				} else {
+					JANUS_LOG(LOG_VERB, "Will remove payload type %d (%s)\n", ptype, a->value);
+					purged_ptypes = g_list_append(purged_ptypes, GINT_TO_POINTER(ptype));
+				}
 			}
 			tempA = tempA->next;
 		}

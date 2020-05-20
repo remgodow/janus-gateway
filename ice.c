@@ -1013,10 +1013,15 @@ int janus_ice_set_stun_server(gchar *stun_server, uint16_t stun_port) {
 
 	/* Test the STUN server */
 	janus_network_address public_addr = { 0 };
-	if(janus_ice_test_stun_server(&addr, janus_stun_port, 0, &public_addr, NULL) < 0)
+	if(janus_ice_test_stun_server(&addr, janus_stun_port, 0, &public_addr, NULL) < 0) {
+		g_free(janus_stun_server);
+		janus_stun_server = NULL;
 		return -1;
+	}
 	if(janus_network_address_to_string_buffer(&public_addr, &addr_buf) != 0) {
 		JANUS_LOG(LOG_ERR, "Could not resolve public address...\n");
+		g_free(janus_stun_server);
+		janus_stun_server = NULL;
 		return -1;
 	}
 	const char *public_ip = janus_network_address_string_from_buffer(&addr_buf);
@@ -1575,6 +1580,9 @@ static void janus_handle_webrtc_medium_free(const janus_refcount *medium_ref) {
 	if(medium->rtx_payload_types != NULL)
 		g_hash_table_destroy(medium->rtx_payload_types);
 	medium->rtx_payload_types = NULL;
+    if(medium->clock_rates != NULL)
+        g_hash_table_destroy(medium->clock_rates);
+    medium->clock_rates = NULL;
 	g_free(medium->codec);
 	medium->codec = NULL;
 	g_free(medium->rtcp_ctx[0]);
@@ -2455,7 +2463,7 @@ static void janus_ice_cb_nice_recv(NiceAgent *agent, guint stream_id, guint comp
 				janus_rtcp_process_incoming_rtp(rtcp_ctx, buf, buflen,
 					(video && rtx),
 					(video && janus_flags_is_set(&handle->webrtc_flags, JANUS_HANDLE_WEBRTC_RFC4588_RTX)),
-					retransmissions_disabled);
+					retransmissions_disabled, medium->clock_rates);
 				/* Keep track of RTP sequence numbers, in case we need to NACK them */
 				/* 	Note: unsigned int overflow/underflow wraps (defined behavior) */
 				if(retransmissions_disabled) {
@@ -3901,8 +3909,10 @@ static gboolean janus_ice_outgoing_traffic_handle(janus_handle *handle, janus_ic
 							if(pkt->type == JANUS_ICE_PACKET_AUDIO) {
 								/* Let's check if this was G.711: in case we may need to change the timestamp base */
 								int pt = header->type;
-								if((pt == 0 || pt == 8) && (rtcp_ctx->tb == 48000))
-									rtcp_ctx->tb = 8000;
+                                uint32_t clock_rate = medium->clock_rates ?
+                                                      GPOINTER_TO_UINT(g_hash_table_lookup(stream->clock_rates, GINT_TO_POINTER(pt))) : 48000;
+                                if(rtcp_ctx->tb != clock_rate)
+                                    rtcp_ctx->tb = clock_rate;
 							}
 							/* Update sent packets counter */
 							g_atomic_int_inc(&rtcp_ctx->sent_packets_since_last_rr);
