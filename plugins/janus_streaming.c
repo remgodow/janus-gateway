@@ -1818,7 +1818,7 @@ int janus_streaming_init(janus_callbacks *callback, const char *config_path) {
 						cl = cl->next;
 						continue;
 					}
-				uint16_t audio_port = 0, audio_rtcp_port = 0;
+				    uint16_t audio_port = 0, audio_rtcp_port = 0;
 					if(doaudio &&
 						(aport == NULL || aport->value == NULL ||
 						janus_string_to_uint16(aport->value, &audio_port) < 0 || audio_port == 0 ||
@@ -1827,12 +1827,12 @@ int janus_streaming_init(janus_callbacks *callback, const char *config_path) {
 						JANUS_LOG(LOG_ERR, "Can't add 'rtp' stream '%s', missing mandatory information for audio...\n", cat->name);
 						cl = cl->next;
 						continue;
-				}
-				if(doaudio && artcpport != NULL && artcpport->value != NULL &&
+				    }
+				    if(doaudio && artcpport != NULL && artcpport->value != NULL &&
 						(janus_string_to_uint16(artcpport->value, &audio_rtcp_port) < 0 || audio_rtcp_port == 0)) {
-					JANUS_LOG(LOG_ERR, "Can't add 'rtp' stream '%s', invalid audio RTCP port...\n", cat->name);
-					cl = cl->next;
-					continue;
+                        JANUS_LOG(LOG_ERR, "Can't add 'rtp' stream '%s', invalid audio RTCP port...\n", cat->name);
+                        cl = cl->next;
+                        continue;
 					}
 					if(doaudio && aiface) {
 						if(!ifas) {
@@ -1846,7 +1846,7 @@ int janus_streaming_init(janus_callbacks *callback, const char *config_path) {
 							continue;
 						}
 					}
-				uint16_t video_port = 0, video_port2 = 0, video_port3 = 0, video_rtcp_port = 0;
+				    uint16_t video_port = 0;
 					if(dovideo &&
 						(vport == NULL || vport->value == NULL ||
 						janus_string_to_uint16(vport->value, &video_port) < 0 || video_port == 0 ||
@@ -6349,7 +6349,7 @@ static int janus_streaming_rtsp_connect_to_server(janus_streaming_mountpoint *mp
 							/* Take note of the video SSRC */
 							uint32_t ssrc = strtol(value, NULL, 16);
 							JANUS_LOG(LOG_VERB, "  -- SSRC (video): %"SCNu32"\n", ssrc);
-							source->video_ssrc = ssrc;
+							video_ssrc = ssrc;
 						} else if(!strcasecmp(name, "source")) {
 							/* If we got an address via c-line, replace it */
 							g_snprintf(vhost, sizeof(vhost), "%s", value);
@@ -6532,7 +6532,7 @@ static int janus_streaming_rtsp_connect_to_server(janus_streaming_mountpoint *mp
 							/* Take note of the audio SSRC */
 							uint32_t ssrc = strtol(value, NULL, 16);
 							JANUS_LOG(LOG_VERB, "  -- SSRC (audio): %"SCNu32"\n", ssrc);
-							source->audio_ssrc = ssrc;
+							audio_ssrc = ssrc;
 						} else if(!strcasecmp(name, "source")) {
 							/* If we got an address via c-line, replace it */
 							g_snprintf(ahost, sizeof(ahost), "%s", value);
@@ -7956,9 +7956,9 @@ static void janus_streaming_relay_rtp_packet(gpointer data, gpointer user_data) 
 							json_t *result = json_object();
 						    json_object_set_new(result, "mid", json_string(stream->mid));
 							json_object_set_new(result, "spatial_layer", json_integer(s->spatial_layer));
-							if(session->temporal_layer == -1) {
+							if(s->temporal_layer == -1) {
 								/* We just started: initialize the temporal layer and notify that too */
-								session->temporal_layer = 0;
+								s->temporal_layer = 0;
 								json_object_set_new(result, "temporal_layer", json_integer(s->temporal_layer));
 							}
 							json_object_set_new(event, "result", result);
@@ -8011,7 +8011,7 @@ static void janus_streaming_relay_rtp_packet(gpointer data, gpointer user_data) 
 							packet->svc_info.temporal_layer > s->temporal_layer &&
 							packet->svc_info.temporal_layer <= s->target_temporal_layer) {
 						JANUS_LOG(LOG_HUGE, "  -- Upscaling temporal layer: %d --> %d (want %d)\n",
-							s->temporal_layer, packet->svc_info.temporal_layer, session->target_temporal_layer);
+							s->temporal_layer, packet->svc_info.temporal_layer, s->target_temporal_layer);
 						s->temporal_layer = packet->svc_info.temporal_layer;
 						temporal_layer = s->temporal_layer;
 						/* Notify the viewer */
@@ -8054,7 +8054,7 @@ static void janus_streaming_relay_rtp_packet(gpointer data, gpointer user_data) 
 				JANUS_LOG(LOG_HUGE, "Sending packet (spatial=%d, temporal=%d)\n",
 					packet->svc_info.spatial_layer, packet->svc_info.temporal_layer);
 				/* Fix sequence number and timestamp (publisher switching may be involved) */
-				janus_rtp_header_update(packet->data, &s->context, TRUE, 4500);
+				janus_rtp_header_update(packet->data, &s->context, TRUE);
 				if(override_mark_bit && !has_marker_bit) {
 					packet->data->markerbit = 1;
 				}

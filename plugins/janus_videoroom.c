@@ -8394,9 +8394,9 @@ static void janus_videoroom_relay_rtp_packet(gpointer data, gpointer user_data) 
 						json_object_set_new(event, "room", json_integer(subscriber->room_id));
                         json_object_set_new(event, "mid", json_string(stream->mid));
 						json_object_set_new(event, "spatial_layer", json_integer(stream->spatial_layer));
-						if(subscriber->temporal_layer == -1) {
+						if(stream->temporal_layer == -1) {
 							/* We just started: initialize the temporal layer and notify that too */
-							subscriber->temporal_layer = 0;
+							stream->temporal_layer = 0;
 							json_object_set_new(event, "temporal_layer", json_integer(stream->temporal_layer));
 						}
 						gateway->push_event(session->handle, &janus_videoroom_plugin, NULL, event, NULL);
