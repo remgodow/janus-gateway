@@ -3081,6 +3081,7 @@ static json_t *janus_streaming_process_synchronous_request(janus_streaming_sessi
 					goto prepare_response;
 				}
 			}
+			janus_mutex_unlock(&mountpoints_mutex);
 			mp = janus_streaming_create_rtp_source(
 				mpid,
 				name ? (char *)json_string_value(name) : NULL,
