@@ -5562,7 +5562,6 @@ void janus_videoroom_incoming_rtp(janus_plugin_session *handle, int mindex, gboo
 		packet.source = ps;
 		packet.data = rtp;
 		packet.length = len;
-		packet.is_rtp = TRUE;
 		packet.is_video = video;
 		packet.svc = FALSE;
 		if(video && ps->svc) {
@@ -5742,7 +5741,8 @@ void janus_videoroom_incoming_data(janus_plugin_session *handle, char *label, gb
 	janus_mutex_lock_nodebug(&ps->subscribers_mutex);
 	g_slist_foreach(ps->subscribers, janus_videoroom_relay_data_packet, &packet);
 	janus_mutex_unlock_nodebug(&ps->subscribers_mutex);
-	g_free(text);
+	g_free(packet.data);
+	packet.data = NULL;
 	janus_videoroom_publisher_dereference_nodebug(participant);
 }
 
