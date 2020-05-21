@@ -1771,7 +1771,7 @@ int janus_streaming_init(janus_callbacks *callback, const char *config_path) {
 							(vport2 && vport2->value) ? atoi(vport2->value) : 0,
 							(vport3 && vport3->value) ? atoi(vport3->value) : 0,
 							(rtcpport && rtcpport->value) ? atoi(rtcpport->value) : 0,
-                            (rtcpport && rtcpport->value) ? TRUE : FALSE;
+                            (rtcpport && rtcpport->value) ? TRUE : FALSE,
 							(codec && codec->value) ? atoi(codec->value) : 0,
 							rtpmap ? (char *)rtpmap->value : NULL,
 							fmtp ? (char *)fmtp->value : NULL,
@@ -1970,7 +1970,7 @@ int janus_streaming_init(janus_callbacks *callback, const char *config_path) {
 							(vport2 && vport2->value) ? atoi(vport2->value) : 0,
 							(vport3 && vport3->value) ? atoi(vport3->value) : 0,
 							(vrtcpport && vrtcpport->value) ? atoi(vrtcpport->value) : 0,
-                            (vrtcpport && vrtcpport->value) ? TRUE : FALSE;
+                            (vrtcpport && vrtcpport->value) ? TRUE : FALSE,
 							(vcodec && vcodec->value) ? atoi(vcodec->value) : 0,
 							vrtpmap ? (char *)vrtpmap->value : NULL,
 							vfmtp ? (char *)vfmtp->value : NULL,
@@ -2874,6 +2874,7 @@ static json_t *janus_streaming_process_synchronous_request(janus_streaming_sessi
 				gboolean dovideo = video ? json_is_true(video) : FALSE;
 				gboolean dodata = data ? json_is_true(data) : FALSE;
 				gboolean doaskew = FALSE, dovskew = FALSE, dosvc = FALSE;
+				gboolean doaudiortcp = FALSE, dovideortcp = FALSE;
 				if(!doaudio && !dovideo && !dodata) {
 					JANUS_LOG(LOG_ERR, "Can't add 'rtp' stream, no audio, video or data have to be streamed...\n");
 					error_code = JANUS_STREAMING_ERROR_CANT_CREATE;
