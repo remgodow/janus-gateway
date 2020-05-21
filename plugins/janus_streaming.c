@@ -108,6 +108,7 @@ collision = in case of collision (more than one SSRC hitting the same port), the
 dataport = local port for receiving data messages to relay
 datamcast = multicast group for receiving data frames, if any
 dataiface = network interface or IP address to bind to, if any (binds to all otherwise)
+datatype = text|binary (type of data this mountpoint will relay, default=text)
 databuffermsg = true|false (whether the plugin should store the latest
 	message and send it immediately for new viewers)
 threads = number of threads to assist with the relaying part, which can help
@@ -1026,8 +1027,9 @@ static struct janus_json_parameter rtp_data_parameters[] = {
 	/* This syntax is deprecated */
 	{"dataport", JANUS_JSON_INTEGER, JANUS_JSON_PARAM_REQUIRED | JANUS_JSON_PARAM_POSITIVE},
 	{"databuffermsg", JANUS_JSON_BOOL, 0},
-	{"datamcast", JANUS_JSON_STRING, 0},
-	{"dataiface", JANUS_JSON_STRING, 0}
+	{"datatype", JSON_STRING, 0},
+    {"datamcast", JANUS_JSON_STRING, 0},
+	{"dataiface", JSON_STRING, 0}
 };
 static struct janus_json_parameter destroy_parameters[] = {
 	{"id", JANUS_JSON_INTEGER, JANUS_JSON_PARAM_REQUIRED | JANUS_JSON_PARAM_POSITIVE},
@@ -1139,6 +1141,8 @@ typedef struct janus_streaming_rtp_relay_packet {
 	/* The following are only relevant for VP9 SVC*/
 	gboolean svc;
 	janus_vp9_svc_info svc_info;
+	/* The following is only relevant for datachannels */
+	gboolean textdata;
 } janus_streaming_rtp_relay_packet;
 static janus_streaming_rtp_relay_packet exit_packet;
 static void janus_streaming_rtp_relay_packet_free(janus_streaming_rtp_relay_packet *pkt) {
@@ -1237,6 +1241,7 @@ typedef struct janus_streaming_rtp_source_stream {
 	gint64 pli_latest;			/* Time of latest sent PLI (to avoid flooding) */
 	struct sockaddr_storage rtcp_addr;
 	janus_streaming_rtp_keyframe keyframe;
+	gboolean textdata;
 	gboolean buffermsg;
 	void *last_msg;
 	janus_mutex buffermsg_mutex;
@@ -1303,7 +1308,7 @@ janus_streaming_rtp_source_stream *janus_streaming_create_rtp_source_stream(
 	const char *name, int mindex, const char *type, const char *mid, const char *label,
 	char *mcast, char *miface, const janus_network_address *iface, uint16_t port, uint16_t port2, uint16_t port3, uint16_t rtcpport,
 	uint8_t codec, const char *rtpmap, const char *fmtp, gboolean doskew,
-	gboolean bufferkf, gboolean buffermsg, gboolean simulcast, gboolean svc);
+	gboolean bufferkf, gboolean textdata, gboolean buffermsg, gboolean simulcast, gboolean svc);
 janus_streaming_mountpoint *janus_streaming_create_rtp_source(
 	uint64_t id, char *name, char *desc, GList *media,
 	int srtpsuite, char *srtpcrypto, int threads, int rtp_collision);
@@ -1700,6 +1705,7 @@ int janus_streaming_init(janus_callbacks *callback, const char *config_path) {
 						janus_config_item *fmtp = janus_config_get(config, m, janus_config_type_item, "fmtp");
 						janus_config_item *vkf = janus_config_get(config, m, janus_config_type_item, "bufferkf");
 						janus_config_item *vsc = janus_config_get(config, m, janus_config_type_item, "simulcast");
+                        janus_config_item *dt = janus_config_get(config, cat, janus_config_type_item, "datatype");
 						janus_config_item *dbm = janus_config_get(config, cat, janus_config_type_item, "buffermsg");
 						janus_config_item *vport2 = janus_config_get(config, m, janus_config_type_item, "port2");
 						janus_config_item *vport3 = janus_config_get(config, m, janus_config_type_item, "port3");
@@ -1714,6 +1720,18 @@ int janus_streaming_init(janus_callbacks *callback, const char *config_path) {
 							JANUS_LOG(LOG_WARN, "Simulcasting enabled, so disabling buffering of keyframes\n");
 							bufferkf = FALSE;
 						}
+                        gboolean textdata = TRUE;
+                        if(data && dt && dt->value) {
+                            if(!strcasecmp(dt->value, "text"))
+                                textdata = TRUE;
+                            else if(!strcasecmp(dt->value, "binary"))
+                                textdata = FALSE;
+                            else {
+                                JANUS_LOG(LOG_ERR, "Can't add 'rtp' stream '%s', invalid data type '%s'...\n", cat->name, dt->value);
+                                failed = TRUE;
+                                break;
+                            }
+                        }
 						gboolean buffermsg = data && dbm && dbm->value && janus_is_true(dbm->value);
 						if((audio || video) &&
 								(port == NULL || port->value == NULL || atoi(port->value) == 0 ||
@@ -1753,7 +1771,7 @@ int janus_streaming_init(janus_callbacks *callback, const char *config_path) {
 							(codec && codec->value) ? atoi(codec->value) : 0,
 							rtpmap ? (char *)rtpmap->value : NULL,
 							fmtp ? (char *)fmtp->value : NULL,
-							doskew, bufferkf, buffermsg, simulcast, dosvc);
+							doskew, bufferkf, textdata, buffermsg, simulcast, dosvc);
 						if(stream == NULL) {
 							JANUS_LOG(LOG_ERR, "Can't add '%s' stream '%s', error creating source stream...\n", type->value, cat->name);
 							failed = TRUE;
@@ -1799,6 +1817,7 @@ int janus_streaming_init(janus_callbacks *callback, const char *config_path) {
 					janus_config_item *vport3 = janus_config_get(config, cat, janus_config_type_item, "videoport3");
 					janus_config_item *dport = janus_config_get(config, cat, janus_config_type_item, "dataport");
 					janus_config_item *dbm = janus_config_get(config, cat, janus_config_type_item, "databuffermsg");
+                    janus_config_item *dt = janus_config_get(config, cat, janus_config_type_item, "datatype");
 					gboolean doaudio = audio && audio->value && janus_is_true(audio->value);
 					gboolean doaskew = audio && askew && askew->value && janus_is_true(askew->value);
 					gboolean dovideo = video && video->value && janus_is_true(video->value);
@@ -1813,6 +1832,18 @@ int janus_streaming_init(janus_callbacks *callback, const char *config_path) {
 						bufferkf = FALSE;
 					}
 					gboolean buffermsg = data && dbm && dbm->value && janus_is_true(dbm->value);
+                    gboolean textdata = FALSE;
+                    if(dodata && dt && dt->value) {
+                        if(!strcasecmp(dt->value, "text"))
+                            textdata = TRUE;
+                        else if(!strcasecmp(dt->value, "binary"))
+                            textdata = FALSE;
+                        else {
+                            JANUS_LOG(LOG_ERR, "Can't add 'rtp' stream '%s', invalid data type '%s'...\n", cat->name, dt->value);
+                            cl = cl->next;
+                            continue;
+                        }
+                    }
 					if(!doaudio && !dovideo && !dodata) {
 						JANUS_LOG(LOG_ERR, "Can't add 'rtp' stream '%s', no audio, video or data have to be streamed...\n", cat->name);
 						cl = cl->next;
@@ -1912,7 +1943,7 @@ int janus_streaming_init(janus_callbacks *callback, const char *config_path) {
 							(acodec && acodec->value) ? atoi(acodec->value) : 0,
 							artpmap ? (char *)artpmap->value : NULL,
 							afmtp ? (char *)afmtp->value : NULL,
-							doaskew, FALSE, FALSE, FALSE, FALSE);
+							doaskew, FALSE, FALSE, FALSE, FALSE, FALSE);
 						if(stream == NULL) {
 							JANUS_LOG(LOG_ERR, "Skipping 'audio' stream '%s', error creating source stream...\n", cat->name);
 							cl = cl->next;
@@ -1936,7 +1967,7 @@ int janus_streaming_init(janus_callbacks *callback, const char *config_path) {
 							(vcodec && vcodec->value) ? atoi(vcodec->value) : 0,
 							vrtpmap ? (char *)vrtpmap->value : NULL,
 							vfmtp ? (char *)vfmtp->value : NULL,
-							dovskew, bufferkf, FALSE, simulcast, dosvc);
+							dovskew, bufferkf, FALSE, FALSE, simulcast, dosvc);
 						if(stream == NULL) {
 							JANUS_LOG(LOG_ERR, "Skipping 'video' stream '%s', error creating source stream...\n", cat->name);
 							cl = cl->next;
@@ -1946,6 +1977,18 @@ int janus_streaming_init(janus_callbacks *callback, const char *config_path) {
 						streams = g_list_append(streams, stream);
 					}
 					if(dodata) {
+                        gboolean textdata = TRUE;
+                        if(data && dt && dt->value) {
+                            if(!strcasecmp(dt->value, "text"))
+                                textdata = TRUE;
+                            else if(!strcasecmp(dt->value, "binary"))
+                                textdata = FALSE;
+                            else {
+                                JANUS_LOG(LOG_ERR, "Can't add 'rtp' stream '%s', invalid data type '%s'...\n", cat->name, dt->value);
+                                cl = cl->next;
+                                continue;
+                            }
+                        }
 						/* Create the data source stream */
 						janus_streaming_rtp_source_stream *stream = janus_streaming_create_rtp_source_stream(
 							cat->name, g_list_length(streams),
@@ -1954,7 +1997,7 @@ int janus_streaming_init(janus_callbacks *callback, const char *config_path) {
 							diface && diface->value ? (char *)diface->value : NULL,
 							diface && diface->value ? &data_iface : NULL,
 							(dport && dport->value) ? atoi(dport->value) : 0, 0, 0, 0,
-							0, NULL, NULL, FALSE, FALSE, buffermsg, FALSE, FALSE);
+							0, NULL, NULL, FALSE, FALSE, textdata, buffermsg, FALSE, FALSE);
 						if(stream == NULL) {
 							JANUS_LOG(LOG_ERR, "Skipping 'data' stream '%s', error creating source stream...\n", cat->name);
 							cl = cl->next;
@@ -2786,7 +2829,7 @@ static json_t *janus_streaming_process_synchronous_request(janus_streaming_sessi
 						g_list_length(streams),
 						mtype, mid, label ? label : mtype,
 						mcast, miface, &iface, port, port2, port3, rtcpport,
-						codec, rtpmap, fmtp, doskew, bufferkf, buffermsg, simulcast, dosvc);
+						codec, rtpmap, fmtp, doskew, bufferkf, textdata, buffermsg, simulcast, dosvc);
 					if(stream == NULL) {
 						JANUS_LOG(LOG_ERR, "Can't add 'rtp' stream '%s', error creating data source stream...\n", (const char *)json_string_value(name));
 						error_code = JANUS_STREAMING_ERROR_CANT_CREATE;
@@ -2855,7 +2898,7 @@ static json_t *janus_streaming_process_synchronous_request(janus_streaming_sessi
 						g_list_length(streams),
 						"audio", "a", "audio",
 						amcast, amiface, &audio_iface, aport, 0, 0, artcpport,
-						acodec, artpmap, afmtp, doaskew, FALSE, FALSE, FALSE, FALSE);
+						acodec, artpmap, afmtp, doaskew, FALSE, FALSE, FALSE, FALSE, FALSE);
 					if(stream == NULL) {
 						JANUS_LOG(LOG_ERR, "Can't add 'rtp' stream '%s', error creating audio source stream...\n", (const char *)json_string_value(name));
 						error_code = JANUS_STREAMING_ERROR_CANT_CREATE;
@@ -2924,7 +2967,7 @@ static json_t *janus_streaming_process_synchronous_request(janus_streaming_sessi
 						g_list_length(streams),
 						"video", "v", "video",
 						vmcast, vmiface, &video_iface, vport, vport2, vport3, vrtcpport,
-						vcodec, vrtpmap, vfmtp, dovskew, bufferkf, FALSE, simulcast, dosvc);
+						vcodec, vrtpmap, vfmtp, dovskew, bufferkf, FALSE, FALSE, simulcast, dosvc);
 					if(stream == NULL) {
 						JANUS_LOG(LOG_ERR, "Can't add 'rtp' stream '%s', error creating video source stream...\n", (const char *)json_string_value(name));
 						error_code = JANUS_STREAMING_ERROR_CANT_CREATE;
@@ -2935,7 +2978,7 @@ static json_t *janus_streaming_process_synchronous_request(janus_streaming_sessi
 					streams = g_list_append(streams, stream);
 				}
 				uint16_t dport = 0;
-				gboolean buffermsg = FALSE;
+				gboolean textdata = TRUE, buffermsg = FALSE;
 				char *dmcast = NULL, *dmiface = NULL;
 				if(dodata) {
 					JANUS_VALIDATE_JSON_OBJECT(root, rtp_data_parameters,
@@ -2950,6 +2993,20 @@ static json_t *janus_streaming_process_synchronous_request(janus_streaming_sessi
 					dport = json_integer_value(dataport);
 					json_t *dbm = json_object_get(root, "databuffermsg");
 					buffermsg = dbm ? json_is_true(dbm) : FALSE;
+                    json_t *dt = json_object_get(root, "datatype");
+                    if(dt) {
+                        const char *datatype = (const char *)json_string_value(dt);
+                        if(!strcasecmp(datatype, "text"))
+                            textdata = TRUE;
+                        else if(!strcasecmp(datatype, "binary"))
+                            textdata = FALSE;
+                        else {
+                            JANUS_LOG(LOG_ERR, "Invalid element (datatype can only be text or binary)\n");
+                            error_code = JANUS_STREAMING_ERROR_INVALID_ELEMENT;
+                            g_snprintf(error_cause, 512, "Invalid element (datatype can only be text or binary)");
+                            goto prepare_response;
+                        }
+                    }
 					json_t *diface = json_object_get(root, "dataiface");
 					dmiface = (char *)json_string_value(diface);
 					if(diface) {
@@ -2968,7 +3025,7 @@ static json_t *janus_streaming_process_synchronous_request(janus_streaming_sessi
 						g_list_length(streams),
 						"data", "d", "data",
 						dmcast, dmiface, &data_iface, dport, 0, 0, 0, 0,
-						NULL, NULL, FALSE, FALSE, buffermsg, FALSE, FALSE);
+						NULL, NULL, FALSE, FALSE, textdata, buffermsg, FALSE, FALSE);
 					if(stream == NULL) {
 						JANUS_LOG(LOG_ERR, "Can't add 'rtp' stream '%s', error creating data source stream...\n", (const char *)json_string_value(name));
 						error_code = JANUS_STREAMING_ERROR_CANT_CREATE;
@@ -5699,7 +5756,7 @@ janus_streaming_rtp_source_stream *janus_streaming_create_rtp_source_stream(
 		const char *name, int mindex, const char *type, const char *mid, const char *label,
 		char *mcast, char *miface, const janus_network_address *iface, uint16_t port, uint16_t port2, uint16_t port3, uint16_t rtcpport,
 		uint8_t codec, const char *rtpmap, const char *fmtp, gboolean doskew,
-		gboolean bufferkf, gboolean buffermsg, gboolean simulcast, gboolean svc) {
+		gboolean bufferkf, gboolean textdata, gboolean buffermsg, gboolean simulcast, gboolean svc) {
 	if(type == NULL || mid == NULL || label == NULL) {
 		JANUS_LOG(LOG_ERR, "[%s] Can't add 'rtp' stream, missing media type, mid or label...\n", name);
 		return NULL;
@@ -5825,6 +5882,7 @@ janus_streaming_rtp_source_stream *janus_streaming_create_rtp_source_stream(
 		stream->keyframe.temp_ts = 0;
 		janus_mutex_init(&stream->keyframe.mutex);
 	} else if(mtype == JANUS_STREAMING_MEDIA_DATA) {
+	    stream->textdata = textdata;
 		stream->buffermsg = buffermsg;
 		stream->last_msg = NULL;
 		janus_mutex_init(&stream->buffermsg_mutex);
@@ -7753,28 +7811,28 @@ static void *janus_streaming_relay_thread(void *data) {
 					}
 					if(!mountpoint->enabled && !stream->rc)
 						continue;
-					/* Get a string out of the data */
-					char *text = g_malloc(bytes+1);
-					memcpy(text, buffer, bytes);
-					*(text+bytes) = '\0';
+					/* Copy the data */
+					char *data = g_malloc(bytes);
+					memcpy(data, buffer, bytes);
 					/* Relay on all sessions */
 					packet.mindex = stream->mindex;
-					packet.data = (janus_rtp_header *)text;
-					packet.length = bytes+1;
+					packet.data = (janus_rtp_header *)data;
+					packet.length = bytes;
 					packet.is_rtp = FALSE;
+					packet.textdata = source->textdata;
 					/* Is there a recorder? */
-					janus_recorder_save_frame(stream->rc, text, strlen(text));
+					janus_recorder_save_frame(stream->rc, data, bytes);
 					if(!mountpoint->enabled)
 						continue;
 					/* Are we keeping track of the last message being relayed? */
 					if(stream->buffermsg) {
 						janus_mutex_lock(&stream->buffermsg_mutex);
 						janus_streaming_rtp_relay_packet *pkt = g_malloc0(sizeof(janus_streaming_rtp_relay_packet));
-						pkt->data = g_malloc(bytes+1);
-						memcpy(pkt->data, text, bytes+1);
+                        pkt->data = g_malloc(bytes);
+                        memcpy(pkt->data, data, bytes);
 						packet.is_rtp = FALSE;
-						pkt->length = bytes+1;
-						janus_mutex_unlock(&stream->buffermsg_mutex);
+                        pkt->length = bytes;
+                        janus_mutex_unlock(&stream->buffermsg_mutex);
 					}
 					/* Go! */
 					janus_mutex_lock(&mountpoint->mutex);
@@ -7782,8 +7840,9 @@ static void *janus_streaming_relay_thread(void *data) {
 						mountpoint->helper_threads == 0 ? janus_streaming_relay_rtp_packet : janus_streaming_helper_rtprtcp_packet,
 						&packet);
 					janus_mutex_unlock(&mountpoint->mutex);
+					}
+					g_free(packet.data);
 					packet.data = NULL;
-					g_free(text);
 					continue;
 				} else if(stream->type == JANUS_STREAMING_MEDIA_AUDIO && fds[i].fd == stream->rtcp_fd) {
 					addrlen = sizeof(remote);
@@ -8153,7 +8212,7 @@ static void janus_streaming_relay_rtp_packet(gpointer data, gpointer user_data) 
 		/* We're broadcasting a data channel message */
 		char *text = (char *)packet->data;
 		if(gateway != NULL && text != NULL)
-			gateway->relay_data(session->handle, NULL, text, strlen(text));
+            gateway->relay_data(session->handle, NULL, packet->textdata, (char *)packet->data, packet->length);
 	}
 
 	return;

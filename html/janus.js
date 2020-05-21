@@ -1378,7 +1378,7 @@ function Janus(gatewayCallbacks) {
 	}
 
 	// Private method to create a data channel
-	function createDataChannel(handleId, dclabel, incoming, pendingText) {
+	function createDataChannel(handleId, dclabel, incoming, pendingData) {
 		var pluginHandle = pluginHandles[handleId];
 		if(!pluginHandle || !pluginHandle.webrtcStuff) {
 			Janus.warn("Invalid handle");
@@ -1399,9 +1399,10 @@ function Janus(gatewayCallbacks) {
 				// Any pending messages to send?
 				if(config.dataChannel[label].pending && config.dataChannel[label].pending.length > 0) {
 					Janus.log("Sending pending messages on <" + label + ">:", config.dataChannel[label].pending.length);
-					for(var text of config.dataChannel[label].pending) {
-						Janus.log("Sending string on data channel <" + label + ">: " + text);
-						config.dataChannel[label].send(text);
+					for(var data of config.dataChannel[label].pending) {
+						Janus.log("Sending data on data channel <" + label + ">");
+						Janus.debug(data);
+						config.dataChannel[label].send(data);
 					}
 					config.dataChannel[label].pending = [];
 				}
@@ -1415,7 +1416,7 @@ function Janus(gatewayCallbacks) {
 		}
 		if(!incoming) {
 			// FIXME Add options (ordered, maxRetransmits, etc.)
-			config.dataChannel[dclabel] = config.pc.createDataChannel(dclabel, {ordered:false});
+			config.dataChannel[dclabel] = config.pc.createDataChannel(dclabel, {ordered: true});
 		} else {
 			// The channel was created by Janus
 			config.dataChannel[dclabel] = incoming;
@@ -1425,8 +1426,8 @@ function Janus(gatewayCallbacks) {
 		config.dataChannel[dclabel].onclose = onDataChannelStateChange;
 		config.dataChannel[dclabel].onerror = onDataChannelError;
 		config.dataChannel[dclabel].pending = [];
-		if(pendingText)
-			config.dataChannel[dclabel].pending.push(pendingText);
+		if(pendingData)
+			config.dataChannel[dclabel].pending.push(pendingData);
 	}
 
 	// Private method to send a data channel message
@@ -1441,26 +1442,27 @@ function Janus(gatewayCallbacks) {
 			return;
 		}
 		var config = pluginHandle.webrtcStuff;
-		var text = callbacks.text;
-		if(!text) {
-			Janus.warn("Invalid text");
-			callbacks.error("Invalid text");
+		var data = callbacks.text || callbacks.data;
+		if(!data) {
+			Janus.warn("Invalid data");
+			callbacks.error("Invalid data");
 			return;
 		}
 		var label = callbacks.label ? callbacks.label : Janus.dataChanDefaultLabel;
 		if(!config.dataChannel[label]) {
 			// Create new data channel and wait for it to open
-			createDataChannel(handleId, label, false, text);
+			createDataChannel(handleId, label, false, data);
 			callbacks.success();
 			return;
 		}
 		if(config.dataChannel[label].readyState !== "open") {
-			config.dataChannel[label].pending.push(text);
+			config.dataChannel[label].pending.push(data);
 			callbacks.success();
 			return;
 		}
-		Janus.log("Sending string on data channel <" + label + ">: " + text);
-		config.dataChannel[label].send(text);
+		Janus.log("Sending data on data channel <" + label + ">");
+		Janus.debug(data);
+		config.dataChannel[label].send(data);
 		callbacks.success();
 	}
 

@@ -590,15 +590,17 @@ void janus_ice_relay_rtcp(janus_handle *handle, int mindex, gboolean video, char
 /*! \brief Core SCTP/DataChannel callback, called when a plugin has data to send to a peer
  * @param[in] handle The Janus handle associated with the peer
  * @param[in] label The label of the data channel to use
+ * @param[in] textdata Whether the buffer is text (domstring) or binary data
  * @param[in] buf The message data (buffer)
  * @param[in] len The buffer lenght */
-void janus_ice_relay_data(janus_handle *handle, char *label, char *buf, int len);
+void janus_ice_relay_data(janus_handle *handle, char *label, gboolean textdata, char *buf, int len);
 /*! \brief Plugin SCTP/DataChannel callback, called by the SCTP stack when when there's data for a plugin
  * @param[in] handle The Janus handle associated with the peer
  * @param[in] label The label of the data channel the message is from
+ * @param[in] textdata Whether the buffer is text (domstring) or binary data
  * @param[in] buffer The message data (buffer)
  * @param[in] length The buffer lenght */
-void janus_ice_incoming_data(janus_handle *handle, char *label, char *buffer, int length);
+void janus_ice_incoming_data(janus_handle *handle, char *label, gboolean textdata, char *buffer, int length);
 /*! \brief Core SCTP/DataChannel callback, called by the SCTP stack when when there's data to send.
  * @param[in] handle The Janus handle associated with the peer
  * @param[in] buffer The message data (buffer)

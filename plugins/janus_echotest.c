@@ -144,7 +144,7 @@ json_t *janus_echotest_handle_admin_message(json_t *message);
 void janus_echotest_setup_media(janus_plugin_session *handle);
 void janus_echotest_incoming_rtp(janus_plugin_session *handle, int mindex, gboolean video, char *buf, int len);
 void janus_echotest_incoming_rtcp(janus_plugin_session *handle, int mindex, gboolean video, char *buf, int len);
-void janus_echotest_incoming_data(janus_plugin_session *handle, char *label, char *buf, int len);
+void janus_echotest_incoming_data(janus_plugin_session *handle, char *label, gboolean textdata, char *buf, int len);
 void janus_echotest_slow_link(janus_plugin_session *handle, int mindex, gboolean video, gboolean uplink);
 void janus_echotest_hangup_media(janus_plugin_session *handle);
 void janus_echotest_destroy_session(janus_plugin_session *handle, int *error);
@@ -638,7 +638,7 @@ void janus_echotest_incoming_rtcp(janus_plugin_session *handle, int mindex, gboo
 	}
 }
 
-void janus_echotest_incoming_data(janus_plugin_session *handle, char *label, char *buf, int len) {
+void janus_echotest_incoming_data(janus_plugin_session *handle, char *label, gboolean textdata, char *buf, int len) {
 	if(handle == NULL || g_atomic_int_get(&handle->stopped) || g_atomic_int_get(&stopping) || !g_atomic_int_get(&initialized))
 		return;
 	/* Simple echo test */
@@ -652,6 +652,15 @@ void janus_echotest_incoming_data(janus_plugin_session *handle, char *label, cha
 			return;
 		if(buf == NULL || len <= 0)
 			return;
+		if(!textdata) {
+			JANUS_LOG(LOG_VERB, "Got a binary DataChannel message (label=%s, %d bytes) to bounce back\n", label, len);
+			/* Save the frame if we're recording */
+			janus_recorder_save_frame(session->drc, buf, len);
+			/* Binary data, shoot back as it is */
+			gateway->relay_data(handle, label, FALSE, buf, len);
+			return;
+		}
+		/* Text data */
 		char *text = g_malloc(len+1);
 		memcpy(text, buf, len);
 		*(text+len) = '\0';
@@ -663,7 +672,7 @@ void janus_echotest_incoming_data(janus_plugin_session *handle, char *label, cha
 		char *reply = g_malloc(strlen(prefix)+len+1);
 		g_snprintf(reply, strlen(prefix)+len+1, "%s%s", prefix, text);
 		g_free(text);
-		gateway->relay_data(handle, label, reply, strlen(reply));
+		gateway->relay_data(handle, label, TRUE, reply, strlen(reply));
 		g_free(reply);
 	}
 }

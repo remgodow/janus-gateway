@@ -170,7 +170,7 @@ janus_plugin *create(void) {
  * Janus instance or it will crash.
  *
  */
-#define JANUS_PLUGIN_API_VERSION	13
+#define JANUS_PLUGIN_API_VERSION	14
 
 /*! \brief Initialization of all plugin properties to NULL
  *
@@ -306,9 +306,10 @@ struct janus_plugin {
 	 * use them. Notice that no mindex is needed here, as there can only be a single data channel stream.
 	 * @param[in] handle The plugin/gateway session used for this peer
 	 * @param[in] label The label of the data channel to use
+	 * @param[in] textdata Whether the buffer is text (domstring) or binary data
 	 * @param[in] buf The message data (buffer)
 	 * @param[in] len The buffer lenght */
-	void (* const incoming_data)(janus_plugin_session *handle, char *label, char *buf, int len);
+	void (* const incoming_data)(janus_plugin_session *handle, char *label, gboolean textdata, char *buf, int len);
 	/*! \brief Method to be notified by the core when too many NACKs have
 	 * been received or sent by Janus, and so a slow or potentially
 	 * unreliable network is to be expected for this peer
@@ -373,9 +374,10 @@ struct janus_callbacks {
 	 * \note Notice that no mindex is needed here, as there can only be a single data channel stream.
 	 * @param[in] handle The plugin/gateway session that will be used for this peer
 	 * @param[in] label The label of the data channel to use
+	 * @param[in] textdata Whether the buffer is text (domstring) or binary data
 	 * @param[in] buf The message data (buffer)
 	 * @param[in] len The buffer lenght */
-	void (* const relay_data)(janus_plugin_session *handle, char *label, char *buf, int len);
+	void (* const relay_data)(janus_plugin_session *handle, char *label, gboolean textdata, char *buf, int len);
 
 	/*! \brief Callback to ask the core to close a WebRTC PeerConnection
 	 * \note A call to this method will result in the core invoking the hangup_media
