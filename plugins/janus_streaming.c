@@ -2762,7 +2762,7 @@ static json_t *janus_streaming_process_synchronous_request(janus_streaming_sessi
 					uint16_t rtcpport = 0;
 					uint8_t codec = 0;
 					char *mtype = NULL, *mid = NULL, *label = NULL, *rtpmap = NULL, *fmtp = NULL, *mcast = NULL, *miface = NULL;
-					gboolean doskew = FALSE, bufferkf = FALSE, simulcast = FALSE, dosvc = FALSE, buffermsg = FALSE;
+					gboolean doskew = FALSE, bufferkf = FALSE, simulcast = FALSE, dosvc = FALSE, textdata = FALSE, buffermsg = FALSE;
 					json_t *jmtype = json_object_get(m, "type");
 					mtype = (char *)json_string_value(jmtype);
 					if(strcasecmp(mtype, "audio") && strcasecmp(mtype, "video") && strcasecmp(mtype, "data")) {
@@ -2822,6 +2822,20 @@ static json_t *janus_streaming_process_synchronous_request(janus_streaming_sessi
 					} else if(!strcasecmp(mtype, "data")) {
 						json_t *dbm = json_object_get(root, "buffermsg");
 						buffermsg = dbm ? json_is_true(dbm) : FALSE;
+                        json_t *dt = json_object_get(root, "datatype");
+                        if(dt) {
+                            const char *datatype = (const char *)json_string_value(dt);
+                            if(!strcasecmp(datatype, "text"))
+                                textdata = TRUE;
+                            else if(!strcasecmp(datatype, "binary"))
+                                textdata = FALSE;
+                            else {
+                                JANUS_LOG(LOG_ERR, "Invalid element (datatype can only be text or binary)\n");
+                                error_code = JANUS_STREAMING_ERROR_INVALID_ELEMENT;
+                                g_snprintf(error_cause, 512, "Invalid element (datatype can only be text or binary)");
+                                goto prepare_response;
+                            }
+                        }
 					}
 					/* Create the data source stream */
 					janus_streaming_rtp_source_stream *stream = janus_streaming_create_rtp_source_stream(
@@ -7819,7 +7833,7 @@ static void *janus_streaming_relay_thread(void *data) {
 					packet.data = (janus_rtp_header *)data;
 					packet.length = bytes;
 					packet.is_rtp = FALSE;
-					packet.textdata = source->textdata;
+					packet.textdata = stream->textdata;
 					/* Is there a recorder? */
 					janus_recorder_save_frame(stream->rc, data, bytes);
 					if(!mountpoint->enabled)
@@ -7830,7 +7844,7 @@ static void *janus_streaming_relay_thread(void *data) {
 						janus_streaming_rtp_relay_packet *pkt = g_malloc0(sizeof(janus_streaming_rtp_relay_packet));
                         pkt->data = g_malloc(bytes);
                         memcpy(pkt->data, data, bytes);
-						packet.is_rtp = FALSE;
+						pkt->is_rtp = FALSE;
                         pkt->length = bytes;
                         janus_mutex_unlock(&stream->buffermsg_mutex);
 					}
@@ -7840,7 +7854,7 @@ static void *janus_streaming_relay_thread(void *data) {
 						mountpoint->helper_threads == 0 ? janus_streaming_relay_rtp_packet : janus_streaming_helper_rtprtcp_packet,
 						&packet);
 					janus_mutex_unlock(&mountpoint->mutex);
-					}
+
 					g_free(packet.data);
 					packet.data = NULL;
 					continue;
