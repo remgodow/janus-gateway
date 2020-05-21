@@ -73,7 +73,7 @@ static BIO_METHOD *BIO_janus_dtls_agent_method(void) {
 #endif
 }
 
-BIO *BIO_janus_dtls_agent_new(struct janus_dtls_srtp *dtls) {
+BIO *BIO_janus_dtls_agent_new(void *dtls) {
 	BIO* bio = BIO_new(BIO_janus_dtls_agent_method());
 	if(bio == NULL) {
 		return NULL;
