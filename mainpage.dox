@@ -3109,8 +3109,7 @@ ldd janus | grep asan
  * - \ref echotest
  * - \ref streaming
  * - \ref videocall
- * - \ref sipsofia
- * - \ref sipre
+ * - \ref sip
  * - \ref nosip
  * - \ref audiobridge
  * - \ref videoroom

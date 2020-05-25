@@ -565,7 +565,7 @@ room-<unique room ID>: {
 	"request" : "<mute|unmute, whether to mute or unmute >",
 	"secret" : "<room secret, mandatory if configured>",
 	"room" : <unique numeric ID of the room>,
-	"id" : <unique numeric ID of the participant to kick>
+	"id" : <unique numeric ID of the participant to mute|unmute>
 }
 \endverbatim
  *
@@ -981,8 +981,7 @@ static void janus_audiobridge_participant_free(const janus_refcount *participant
 	if(participant->outbuf != NULL) {
 		while(g_async_queue_length(participant->outbuf) > 0) {
 			janus_audiobridge_rtp_relay_packet *pkt = g_async_queue_pop(participant->outbuf);
-			if(pkt)
-				g_free(pkt->data);
+			g_free(pkt->data);
 			g_free(pkt);
 		}
 		g_async_queue_unref(participant->outbuf);
@@ -3151,6 +3150,12 @@ void janus_audiobridge_setup_media(janus_plugin_session *handle) {
 	/* Notify all other participants that there's a new boy in town */
 	janus_mutex_lock(&rooms_mutex);
 	janus_audiobridge_room *audiobridge = participant->room;
+	if(audiobridge == NULL) {
+		/* No room..? Shouldn't happen */
+		janus_mutex_unlock(&rooms_mutex);
+		JANUS_LOG(LOG_WARN, "PeerConnection created, but AudioBridge participant not in a room...\n");
+		return;
+	}
 	janus_mutex_lock(&audiobridge->mutex);
 	json_t *list = json_array();
 	json_t *pl = json_object();
