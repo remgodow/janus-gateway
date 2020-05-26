@@ -3966,7 +3966,7 @@ static gboolean janus_ice_outgoing_traffic_handle(janus_handle *handle, janus_ic
 							g_atomic_int_inc(&rtcp_ctx->sent_packets_since_last_rr);
 						}
 					}
-					if(pc->nack_queue_ms > 0 && !pkt->retransmission) {
+					if(medium->nack_queue_ms > 0 && !pkt->retransmission) {
 						/* Save the packet for retransmissions that may be needed later */
 						if(!medium->do_nacks) {
 							/* ... unless NACKs are disabled for this medium */
