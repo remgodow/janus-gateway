@@ -580,24 +580,24 @@ void janus_handle_webrtc_destroy(janus_handle_webrtc *pc);
 /*! \brief Core RTP callback, called when a plugin has an RTP packet to send to a peer
  * @param[in] handle The Janus ICE handle associated with the peer
  * @param[in] packet The RTP packet to send */
-void janus_ice_relay_rtp(janus_ice_handle *handle, janus_plugin_rtp *packet);
+void janus_ice_relay_rtp(janus_handle *handle, janus_plugin_rtp *packet);
 /*! \brief Core RTCP callback, called when a plugin has an RTCP message to send to a peer
  * @param[in] handle The Janus ICE handle associated with the peer
  * @param[in] packet The RTCP message to send */
-void janus_ice_relay_rtcp(janus_ice_handle *handle, janus_plugin_rtcp *packet);
+void janus_ice_relay_rtcp(janus_handle *handle, janus_plugin_rtcp *packet);
 /*! \brief Core SCTP/DataChannel callback, called when a plugin has data to send to a peer
  * @param[in] handle The Janus ICE handle associated with the peer
  * @param[in] packet The message to send */
-void janus_ice_relay_data(janus_ice_handle *handle, janus_plugin_data *packet);
+void janus_ice_relay_data(janus_handle *handle, janus_plugin_data *packet);
 /*! \brief Helper core callback, called when a plugin wants to send a RTCP PLI to a peer
  * @param[in] handle The Janus ICE handle associated with the peer
  * @param[in] mindex Mid of a stream */
-void janus_ice_send_pli(janus_ice_handle *handle, int mindex);
+void janus_ice_send_pli(janus_handle *handle, int mindex);
 /*! \brief Helper core callback, called when a plugin wants to send a RTCP REMB to a peer
  * @param[in] handle The Janus ICE handle associated with the peer
  * @param[in] mindex Mid of a stream
  * @param[in] bitrate The bitrate value to put in the REMB message */
-void janus_ice_send_remb(janus_ice_handle *handle, int mindex, uint32_t bitrate);
+void janus_ice_send_remb(janus_handle *handle, int mindex, uint32_t bitrate);
 /*! \brief Plugin SCTP/DataChannel callback, called by the SCTP stack when when there's data for a plugin
  * @param[in] handle The Janus handle associated with the peer
  * @param[in] label The label of the data channel the message is from

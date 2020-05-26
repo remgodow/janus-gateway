@@ -4621,6 +4621,7 @@ void janus_streaming_incoming_rtcp(janus_plugin_session *handle, janus_plugin_rt
 	gboolean video = packet->video;
 	char *buf = packet->buffer;
 	uint16_t len = packet->length;
+	int mindex = packet->mindex;
 	janus_streaming_rtp_source_stream *stream = g_hash_table_lookup(source->media_byid, GINT_TO_POINTER(mindex));
 	if(stream == NULL)
 		return;
@@ -8239,7 +8240,7 @@ static void janus_streaming_relay_rtp_packet(gpointer data, gpointer user_data) 
 				}
 			} else {
 				/* Fix sequence number and timestamp (switching may be involved) */
-				janus_rtp_header_update(packet->data, &session->context, TRUE, 0);
+				janus_rtp_header_update(packet->data, &s->context, TRUE);
 				janus_plugin_rtp rtp = { .video = packet->is_video, .mindex = s->mindex, .buffer = (char *)packet->data, .length = packet->length };
 				janus_plugin_rtp_extensions_reset(&rtp.extensions);
 				if(gateway != NULL)
@@ -8250,7 +8251,7 @@ static void janus_streaming_relay_rtp_packet(gpointer data, gpointer user_data) 
 			}
 		} else {
 			/* Fix sequence number and timestamp (switching may be involved) */
-			janus_rtp_header_update(packet->data, &session->context, FALSE, 0);
+			janus_rtp_header_update(packet->data, &s->context, FALSE);
 			janus_plugin_rtp rtp = { .video = packet->is_video, .mindex = s->mindex, .buffer = (char *)packet->data, .length = packet->length };
 			janus_plugin_rtp_extensions_reset(&rtp.extensions);
 			if(gateway != NULL)
@@ -8261,8 +8262,6 @@ static void janus_streaming_relay_rtp_packet(gpointer data, gpointer user_data) 
 		}
 	} else {
 		/* We're broadcasting a data channel message */
-		if(!session->data)
-			return;
 		if(gateway != NULL && packet->data != NULL) {
 			janus_plugin_data data = { .label = NULL, .binary = !packet->textdata,
 				.buffer = (char *)packet->data, .length = packet->length };

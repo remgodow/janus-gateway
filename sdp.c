@@ -34,6 +34,7 @@ janus_sdp *janus_sdp_preparse(void *ice_handle, const char *jsep_sdp,
 		JANUS_LOG(LOG_ERR, "  Can't preparse, invalid arguments\n");
 		return NULL;
 	}
+	janus_handle *handle = (janus_handle*)ice_handle;
 	janus_sdp *parsed_sdp = janus_sdp_parse(jsep_sdp, error_str, errlen);
 	if(!parsed_sdp) {
 		JANUS_LOG(LOG_ERR, "  Error parsing SDP? %s\n", error_str ? error_str : "(unknown reason)");

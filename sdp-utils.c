@@ -1152,7 +1152,7 @@ janus_sdp *janus_sdp_generate_offer(const char *name, const char *address, ...) 
             fmtp = NULL;
             if(extmaps != NULL)
                 g_hash_table_destroy(extmaps);
-            if(aextids != NULL)
+            if(extids != NULL)
                 g_hash_table_destroy(extids);
             mdir = JANUS_SDP_DEFAULT;
             /* The value of JANUS_SDP_OA_MLINE MUST be the media we want to add */

@@ -1337,7 +1337,7 @@ void janus_videoroom_setup_media(janus_plugin_session *handle);
 void janus_videoroom_incoming_rtp(janus_plugin_session *handle, janus_plugin_rtp *packet);
 void janus_videoroom_incoming_rtcp(janus_plugin_session *handle, janus_plugin_rtcp *packet);
 void janus_videoroom_incoming_data(janus_plugin_session *handle, janus_plugin_data *packet);
-void janus_videoroom_slow_link(janus_plugin_session *handle, int mindex, gboolean video, gboolean uplink););
+void janus_videoroom_slow_link(janus_plugin_session *handle, int mindex, gboolean video, gboolean uplink);
 void janus_videoroom_hangup_media(janus_plugin_session *handle);
 void janus_videoroom_destroy_session(janus_plugin_session *handle, int *error);
 json_t *janus_videoroom_query_session(janus_plugin_session *handle);
@@ -5377,7 +5377,7 @@ void janus_videoroom_incoming_rtp(janus_plugin_session *handle, janus_plugin_rtp
 	/* In case this is an audio packet and we're doing talk detection, check the audio level extension */
 	if(!video && videoroom->audiolevel_event && ps->active && ps->audio_level_extmap_id > 0) {
 		int level = 0;
-		if(janus_rtp_header_extension_parse_audio_level(buf, len, ps->audio_level_extmap_id, &level) == 0) {
+		if(pkt->extensions.audio_level != -1) {
 			ps->audio_dBov_sum += level;
 			ps->audio_active_packets++;
 			ps->audio_dBov_level = level;
@@ -5567,7 +5567,6 @@ void janus_videoroom_incoming_rtp(janus_plugin_session *handle, janus_plugin_rtp
 		packet.data = rtp;
 		packet.length = len;
 		packet.extensions = pkt->extensions;
-		packet.is_rtp = TRUE;
 		packet.is_video = video;
 		packet.svc = FALSE;
 		if(video && ps->svc) {
@@ -5717,7 +5716,6 @@ void janus_videoroom_incoming_data(janus_plugin_session *handle, janus_plugin_da
 	}
 	char *buf = packet->buffer;
 	uint16_t len = packet->length;
-	int mindex = packet->mindex;
 	/* Any forwarder involved? */
 	janus_mutex_lock(&ps->rtp_forwarders_mutex);
 	/* Forward RTP to the appropriate port for the rtp_forwarders associated with this publisher, if there are any */
@@ -5742,16 +5740,16 @@ void janus_videoroom_incoming_data(janus_plugin_session *handle, janus_plugin_da
 	/* Save the message if we're recording */
 	janus_recorder_save_frame(ps->rc, buf, len);
 	/* Relay to all subscribers */
-	janus_videoroom_data_relay_packet packet;
-	packet.source = ps;
-    packet.data = (struct rtp_header *)buf;
-    packet.length = len;
-    packet.textdata = !packet->binary;
+	janus_videoroom_data_relay_packet relay_packet;
+	relay_packet.source = ps;
+    	relay_packet.data = (struct rtp_header *)buf;
+    	relay_packet.length = len;
+    	relay_packet.textdata = !packet->binary;
 	janus_mutex_lock_nodebug(&ps->subscribers_mutex);
-	g_slist_foreach(ps->subscribers, janus_videoroom_relay_data_packet, &packet);
+	g_slist_foreach(ps->subscribers, janus_videoroom_relay_data_packet, &relay_packet);
 	janus_mutex_unlock_nodebug(&ps->subscribers_mutex);
-	g_free(packet.data);
-	packet.data = NULL;
+	g_free(relay_packet.data);
+	relay_packet.data = NULL;
 	janus_videoroom_publisher_dereference_nodebug(participant);
 }
 
@@ -6907,9 +6905,7 @@ static void *janus_videoroom_handler(void *data) {
 					/* Send a new REMB */
 					if(session->started)
 						participant->remb_latest = janus_get_monotonic_time();
-					char rtcpbuf[24];
-					janus_rtcp_remb((char *)(&rtcpbuf), 24, participant->bitrate);
-					gateway->relay_rtcp(msg->handle, -1, TRUE, rtcpbuf, 24);
+					gateway->send_remb(msg->handle, -1, participant->bitrate);
 				}
 				if(keyframe && json_is_true(keyframe)) {
 					/* FIXME Send a PLI on all video streams */
@@ -8642,7 +8638,6 @@ static void janus_videoroom_relay_data_packet(gpointer data, gpointer user_data)
 	janus_videoroom_publisher_stream *ps = packet->source;
 	if(ps == NULL || ps->publisher == NULL)
 		return;
-	}
 	if(gateway != NULL && packet->data != NULL) {
 		JANUS_LOG(LOG_VERB, "Forwarding %s DataChannel message (%d bytes) to viewer\n",
 			packet->textdata ? "text" : "binary", packet->length);
