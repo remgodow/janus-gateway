@@ -2272,7 +2272,7 @@ const token = getJanusToken('janus', ['janus.plugin.videoroom']),
  * the reference counters in Janus on the fly (useful if you're experiencing
  * memory leaks in the Janus structures and want to investigate them);
  * - \c set_libnice_debug: selectively enable/disable libnice debugging;
- * - \c set_max_nack_queue: change the value of the max NACK queue window;
+ * - \c set_min_nack_queue: change the value of the min NACK queue window;
  * - \c set_no_media_timer: change the value of the no-media timer property;
  * - \c set_slowlink_threshold: change the value of the slowlink-threshold property.
  *
@@ -3065,7 +3065,7 @@ gdb bt
  * Once you've installed libasan, reconfigure Janus like this:
  *
  \verbatim
-CFLAGS="-fsanitize=address -fno-omit-frame-pointer" LDFLAGS="-lasan" ./configure --prefix=/opt/janus
+CFLAGS="-O1 -g3 -ggdb3 -fno-omit-frame-pointer -fsanitize=address -fno-sanitize-recover=all -fsanitize-address-use-after-scope" LDFLAGS="-fsanitize=address" ./configure --prefix=/opt/janus
  \endverbatim
  *
  * Of course you're free to add whatever additional configuration parameter

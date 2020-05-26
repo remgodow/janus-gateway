@@ -1356,6 +1356,10 @@ int janus_sdp_generate_offer_mline(janus_sdp *offer, ...) {
                 janus_sdp_attribute *a = janus_sdp_attribute_create("fmtp", "%d %s", pt, fmtp);
                 m->attributes = g_list_append(m->attributes, a);
             }
+            /* It is safe to add transport-wide rtcp feedback message here, won't be used unless the header extension is negotiated */
+            a = janus_sdp_attribute_create("rtcp-fb", "%d transport-cc", audio_pt);
+            m->attributes = g_list_append(m->attributes, a);
+            offer->m_lines = g_list_append(offer->m_lines, m);
         } else {
             /* Check if there's a custom fmtp line to add for video */
             if(fmtp) {
@@ -1681,12 +1685,13 @@ int janus_sdp_generate_answer_mline(janus_sdp *offer, janus_sdp *answer, janus_s
                         am->attributes = g_list_append(am->attributes, a);
                         a = janus_sdp_attribute_create("rtcp-fb", "%d goog-remb", pt);
                         am->attributes = g_list_append(am->attributes, a);
-                        /* It is safe to add transport-wide rtcp feedback mesage here, won't be used unless the header extension is negotiated*/
-                        a = janus_sdp_attribute_create("rtcp-fb", "%d transport-cc", pt);
-                        am->attributes = g_list_append(am->attributes, a);
-                    }
+					}
+                    /* It is safe to add transport-wide rtcp feedback mesage here, won't be used unless the header extension is negotiated*/
+                    a = janus_sdp_attribute_create("rtcp-fb", "%d transport-cc", pt);
+                    am->attributes = g_list_append(am->attributes, a);
+
                 }
-            }
+			}
             /* Add the extmap attributes, if needed */
             if(extmaps != NULL) {
                 GList *ma = offered->attributes;

@@ -126,12 +126,12 @@ gboolean janus_ice_is_full_trickle_enabled(void);
 /*! \brief Method to check whether IPv6 candidates are enabled/supported or not (still WIP)
  * @returns true if IPv6 candidates are enabled/supported, false otherwise */
 gboolean janus_ice_is_ipv6_enabled(void);
-/*! \brief Method to modify the max NACK value (i.e., the number of packets per handle to store for retransmissions)
- * @param[in] mnq The new max NACK value */
-void janus_set_max_nack_queue(uint mnq);
-/*! \brief Method to get the current max NACK value (i.e., the number of packets per handle to store for retransmissions)
- * @returns The current max NACK value */
-uint janus_get_max_nack_queue(void);
+/*! \brief Method to modify the min NACK value (i.e., the minimum time window of packets per handle to store for retransmissions)
+ * @param[in] mnq The new min NACK value */
+void janus_set_min_nack_queue(uint16_t mnq);
+/*! \brief Method to get the current min NACK value (i.e., the minimum time window of packets per handle to store for retransmissions)
+ * @returns The current min NACK value */
+uint16_t janus_get_min_nack_queue(void);
 /*! \brief Method to modify the no-media event timer (i.e., the number of seconds where no media arrives before Janus notifies this)
  * @param[in] timer The new timer value, in seconds */
 void janus_set_no_media_timer(uint timer);
@@ -384,6 +384,8 @@ struct janus_handle_webrtc {
 	gboolean do_transport_wide_cc;
 	/*! \brief Transport wide cc rtp ext ID */
 	gint transport_wide_cc_ext_id;
+	/*! \brief Last sent transport wide seq num */
+	guint16 transport_wide_cc_out_seq_num;
 	/*! \brief Last received transport wide seq num */
 	guint32 transport_wide_cc_last_seq_num;
 	/*! \brief Last transport wide seq num sent on feedback */
@@ -492,6 +494,8 @@ struct janus_handle_webrtc_medium {
 	guint nack_sent_recent_cnt;
 	/*! \brief List of recently received sequence numbers (as a support to NACK generation, for each simulcast SSRC if needed) */
 	janus_seq_info *last_seqs[3];
+    /*! \brief Size of the NACK queue (in ms), dynamically updated per the RTT */
+    uint16_t nack_queue_ms;
 	/*! \brief Stats for incoming data */
 	janus_media_stats in_stats;
 	/*! \brief Stats for outgoing data */

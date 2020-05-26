@@ -465,21 +465,22 @@ static void janus_ice_free_queued_packet(janus_ice_queued_packet *pkt) {
 	g_free(pkt);
 }
 
-/* Maximum value, in milliseconds, for the NACK queue/retransmissions (default=500ms) */
-#define DEFAULT_MAX_NACK_QUEUE	500
+/* Minimum and maximum value, in milliseconds, for the NACK queue/retransmissions (default=200ms/1000ms) */
+#define DEFAULT_MIN_NACK_QUEUE	200
+#define DEFAULT_MAX_NACK_QUEUE	1000
 /* Maximum ignore count after retransmission (200ms) */
 #define MAX_NACK_IGNORE			200000
 
-static uint max_nack_queue = DEFAULT_MAX_NACK_QUEUE;
-void janus_set_max_nack_queue(uint mnq) {
-	max_nack_queue = mnq;
-	if(max_nack_queue == 0)
+static uint16_t min_nack_queue = DEFAULT_MIN_NACK_QUEUE;
+void janus_set_min_nack_queue(uint16_t mnq) {
+	min_nack_queue = mnq < DEFAULT_MAX_NACK_QUEUE ? mnq : DEFAULT_MAX_NACK_QUEUE;
+	if(min_nack_queue == 0)
 		JANUS_LOG(LOG_VERB, "Disabling NACK queue\n");
 	else
-		JANUS_LOG(LOG_VERB, "Setting max NACK queue to %dms\n", max_nack_queue);
+		JANUS_LOG(LOG_VERB, "Setting min NACK queue to %dms\n", min_nack_queue);
 }
-uint janus_get_max_nack_queue(void) {
-	return max_nack_queue;
+uint16_t janus_get_min_nack_queue(void) {
+	return min_nack_queue;
 }
 /* Helper to clean old NACK packets in the buffer when they exceed the queue time limit */
 static void janus_cleanup_nack_buffer(gint64 now, janus_handle_webrtc *pc, gboolean audio, gboolean video) {
@@ -496,7 +497,7 @@ static void janus_cleanup_nack_buffer(gint64 now, janus_handle_webrtc *pc, gbool
 			continue;
 		if(medium->retransmit_buffer) {
 			janus_rtp_packet *p = (janus_rtp_packet *)g_queue_peek_head(medium->retransmit_buffer);
-			while(p && (!now || (now - p->created >= (gint64)max_nack_queue*1000))) {
+			while(p && (!now || (now - p->created >= (gint64)medium->nack_queue_ms*1000))) {
 				/* Packet is too old, get rid of it */
 				g_queue_pop_head(medium->retransmit_buffer);
 				/* Remove from hashtable too */
@@ -800,8 +801,7 @@ void janus_ice_init(gboolean ice_lite, gboolean ice_tcp, gboolean full_trickle, 
 		janus_ice_tcp_enabled = FALSE;
 #else
 		if(!janus_ice_lite_enabled) {
-			JANUS_LOG(LOG_WARN, "ICE-TCP only works in libnice if you enable ICE Lite too: disabling ICE-TCP support\n");
-			janus_ice_tcp_enabled = FALSE;
+			JANUS_LOG(LOG_WARN, "You may experience problems when having ICE-TCP enabled without having ICE Lite enabled too in libnice\n");
 		}
 #endif
 	}
@@ -1509,6 +1509,7 @@ janus_handle_webrtc_medium *janus_handle_webrtc_medium_create(janus_handle *hand
 	medium->pc = pc;
 	medium->type = type;
 	medium->mindex = g_hash_table_size(pc->media);
+	medium->nack_queue_ms = min_nack_queue;
 	janus_mutex_init(&medium->mutex);
 	janus_refcount_init(&medium->ref, janus_handle_webrtc_medium_free);
 	janus_refcount_increase(&pc->ref);
@@ -2318,14 +2319,11 @@ static void janus_ice_cb_nice_recv(NiceAgent *agent, guint stream_id, guint comp
 					header->ssrc = htonl(packet_ssrc);
 					if(plen > 0) {
 						memcpy(&header->seq_number, payload, 2);
-						/* Finally, remove the original sequence number from the payload: rather than moving
-						 * the whole payload back two bytes, we shift the header forward (less bytes to move) */
+						/* Finally, remove the original sequence number from the payload: move the whole
+						 * payload back two bytes rather than shifting the header forward (avoid misaligned access) */
 						buflen -= 2;
 						plen -= 2;
-						size_t hsize = payload-buf;
-						memmove(buf+2, buf, hsize);
-						buf += 2;
-						payload +=2;
+						memmove(payload, payload+2, plen);
 						header = (janus_rtp_header *)buf;
 						if(pc->rid_ext_id > 1 && pc->ridrtx_ext_id > 1) {
 							/* Replace the 'repaired' extension ID as well with the 'regular' one */
@@ -2668,9 +2666,25 @@ static void janus_ice_cb_nice_recv(NiceAgent *agent, guint stream_id, guint comp
 
 				/* Let's process this RTCP (compound?) packet, and update the RTCP context for this stream in case */
 				rtcp_context *rtcp_ctx = medium->rtcp_ctx[vindex];
-				if (janus_rtcp_parse(rtcp_ctx, buf, buflen) < 0) {
+                uint32_t rtt = rtcp_ctx ? rtcp_ctx->rtt : 0;
+				if(janus_rtcp_parse(rtcp_ctx, buf, buflen) < 0) {
 					/* Drop the packet if the parsing function returns with an error */
 					return;
+				}
+				if(rtcp_ctx && rtcp_ctx->rtt != rtt) {
+					/* Check the current RTT, to see if we need to update the size of the queue: we take
+					 * the RTT and add 100ms just to be conservative */
+					uint16_t nack_queue_ms = rtt + 100;
+					if(nack_queue_ms > DEFAULT_MAX_NACK_QUEUE)
+						nack_queue_ms = DEFAULT_MAX_NACK_QUEUE;
+					else if(nack_queue_ms < min_nack_queue)
+						nack_queue_ms = min_nack_queue;
+					uint16_t mavg = rtt ? ((7*medium->nack_queue_ms + nack_queue_ms)/8) : nack_queue_ms;
+					if(mavg > DEFAULT_MAX_NACK_QUEUE)
+						mavg = DEFAULT_MAX_NACK_QUEUE;
+					else if(mavg < min_nack_queue)
+						mavg = min_nack_queue;
+					medium->nack_queue_ms = mavg;
 				}
 				JANUS_LOG(LOG_HUGE, "[%"SCNu64"] Got %s RTCP (%d bytes)\n", handle->handle_id, video ? "video" : "audio", buflen);
 
@@ -3820,6 +3834,14 @@ static gboolean janus_ice_outgoing_traffic_handle(janus_handle *handle, janus_ic
 					/* ... but only if this isn't a retransmission (for those we already set it before) */
 					header->ssrc = htonl(medium->ssrc);
 				}
+				/* Set the transport-wide sequence number, if needed */
+				if(video && pc->transport_wide_cc_ext_id > 0) {
+					pc->transport_wide_cc_out_seq_num++;
+					if(janus_rtp_header_extension_set_transport_wide_cc(pkt->data, pkt->length,
+							pc->transport_wide_cc_ext_id, pc->transport_wide_cc_out_seq_num) < 0) {
+						JANUS_LOG(LOG_ERR, "[%"SCNu64"] Error setting transport wide CC sequence number...\n", handle->handle_id);
+					}
+				}
 				/* Keep track of payload types too */
 				if(medium->payload_type < 0) {
 					medium->payload_type = header->type;
@@ -3858,7 +3880,7 @@ static gboolean janus_ice_outgoing_traffic_handle(janus_handle *handle, janus_ic
 				}
 				/* Before encrypting, check if we need to copy the unencrypted payload (e.g., for rtx/90000) */
 				janus_rtp_packet *p = NULL;
-				if(max_nack_queue > 0 && !pkt->retransmission && pkt->type == JANUS_ICE_PACKET_VIDEO && medium->do_nacks &&
+				if(medium->nack_queue_ms > 0 && !pkt->retransmission && pkt->type == JANUS_ICE_PACKET_VIDEO && medium->do_nacks &&
 						janus_flags_is_set(&handle->webrtc_flags, JANUS_HANDLE_WEBRTC_RFC4588_RTX)) {
 					/* Save the packet for retransmissions that may be needed later: start by
 					 * making room for two more bytes to store the original sequence number */
@@ -3944,7 +3966,7 @@ static gboolean janus_ice_outgoing_traffic_handle(janus_handle *handle, janus_ic
 							g_atomic_int_inc(&rtcp_ctx->sent_packets_since_last_rr);
 						}
 					}
-					if(max_nack_queue > 0 && !pkt->retransmission) {
+					if(pc->nack_queue_ms > 0 && !pkt->retransmission) {
 						/* Save the packet for retransmissions that may be needed later */
 						if(!medium->do_nacks) {
 							/* ... unless NACKs are disabled for this medium */
@@ -4063,6 +4085,14 @@ void janus_ice_relay_rtp(janus_handle *handle, janus_plugin_rtp *packet) {
 		extheader->length = 0;
 		/* Iterate on all extensions we need */
 		char *index = extensions + 4;
+		/* Check if we need to add the transport-wide CC extension */
+		if(packet->video && handle->pc->transport_wide_cc_ext_id > 0) {
+			*index = (handle->pc->transport_wide_cc_ext_id << 4) + 1;
+			/* We'll actually set the sequence number later, when sending the packet */
+			memset(index+1, 0, 2);
+			index += 3;
+			extlen += 3;
+		}
 		/* Check if we need to add the mid extension */
 		if(handle->pc->mid_ext_id > 0) {
 			char *mid = medium->mid;
