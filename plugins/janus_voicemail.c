@@ -136,8 +136,8 @@ const char *janus_voicemail_get_package(void);
 void janus_voicemail_create_session(janus_plugin_session *handle, int *error);
 struct janus_plugin_result *janus_voicemail_handle_message(janus_plugin_session *handle, char *transaction, json_t *message, json_t *jsep);
 void janus_voicemail_setup_media(janus_plugin_session *handle);
-void janus_voicemail_incoming_rtp(janus_plugin_session *handle, int mindex, gboolean video, char *buf, int len);
-void janus_voicemail_incoming_rtcp(janus_plugin_session *handle, int mindex, gboolean video, char *buf, int len);
+void janus_voicemail_incoming_rtp(janus_plugin_session *handle, janus_plugin_rtp *packet);
+void janus_voicemail_incoming_rtcp(janus_plugin_session *handle, janus_plugin_rtcp *packet);
 void janus_voicemail_hangup_media(janus_plugin_session *handle);
 void janus_voicemail_destroy_session(janus_plugin_session *handle, int *error);
 json_t *janus_voicemail_query_session(janus_plugin_session *handle);
@@ -562,7 +562,7 @@ void janus_voicemail_setup_media(janus_plugin_session *handle) {
 	janus_refcount_decrease(&session->ref);
 }
 
-void janus_voicemail_incoming_rtp(janus_plugin_session *handle, int mindex, gboolean video, char *buf, int len) {
+void janus_voicemail_incoming_rtp(janus_plugin_session *handle, janus_plugin_rtp *packet) {
 	if(handle == NULL || g_atomic_int_get(&handle->stopped) || g_atomic_int_get(&stopping) || !g_atomic_int_get(&initialized))
 		return;
 	janus_voicemail_session *session = (janus_voicemail_session *)handle->plugin_handle;
@@ -583,6 +583,8 @@ void janus_voicemail_incoming_rtp(janus_plugin_session *handle, int mindex, gboo
 		return;
 	}
 	/* Save the frame */
+	char *buf = packet->buffer;
+	uint16_t len = packet->length;
 	janus_rtp_header *rtp = (janus_rtp_header *)buf;
 	uint16_t seq = ntohs(rtp->seq_number);
 	if(session->seq == 0)
@@ -601,7 +603,7 @@ void janus_voicemail_incoming_rtp(janus_plugin_session *handle, int mindex, gboo
 	ogg_write(session);
 }
 
-void janus_voicemail_incoming_rtcp(janus_plugin_session *handle, int mindex, gboolean video, char *buf, int len) {
+void janus_voicemail_incoming_rtcp(janus_plugin_session *handle, janus_plugin_rtcp *packet) {
 	if(handle == NULL || g_atomic_int_get(&handle->stopped) || g_atomic_int_get(&stopping) || !g_atomic_int_get(&initialized))
 		return;
 	/* FIXME Should we care? */

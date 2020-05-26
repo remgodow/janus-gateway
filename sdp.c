@@ -53,6 +53,24 @@ janus_sdp *janus_sdp_preparse(void *ice_handle, const char *jsep_sdp,
 		} else if(data && m->type == JANUS_SDP_APPLICATION && strstr(m->proto, "DTLS/SCTP")) {
 			*data = *data+1;
 		}
+		/* Preparse the mid as well */
+		GList *tempA = m->attributes;
+		while(tempA) {
+			janus_sdp_attribute *a = (janus_sdp_attribute *)tempA->data;
+			if(a->name) {
+				if(!strcasecmp(a->name, "mid")) {
+					/* Found mid attribute */
+					if(m->port > 0) {
+						JANUS_LOG(LOG_VERB, "[%"SCNu64"] Mid: %s\n", handle->handle_id, a->value);
+						if(strlen(a->value) > 16) {
+							JANUS_LOG(LOG_ERR, "[%"SCNu64"] Mid too large: (%zu > 16)\n", handle->handle_id, strlen(a->value));
+							return NULL;
+						}
+					}
+				}
+			}
+			tempA = tempA->next;
+		}
 		temp = temp->next;
 	}
 
@@ -214,6 +232,11 @@ int janus_sdp_process_remote(void *ice_handle, janus_sdp *remote_sdp, gboolean u
 				if(!strcasecmp(a->name, "mid")) {
 					/* Found mid attribute */
 					if(medium->mid == NULL) {
+                        JANUS_LOG(LOG_VERB, "[%"SCNu64"] Mid: %s\n", handle->handle_id, a->value);
+                        if(strlen(a->value) > 16) {
+                            JANUS_LOG(LOG_ERR, "[%"SCNu64"] Mid too large: (%zu > 16)\n", handle->handle_id, strlen(a->value));
+                            return -2;
+                        }
 						medium->mid = g_strdup(a->value);
 						if(!g_hash_table_lookup(pc->media_bymid, medium->mid)) {
 							g_hash_table_insert(pc->media_bymid, g_strdup(medium->mid), medium);
