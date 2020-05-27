@@ -425,6 +425,7 @@ static json_t *janus_info(const char *transaction) {
 int janus_log_level = LOG_INFO;
 gboolean janus_log_timestamps = FALSE;
 gboolean janus_log_colors = FALSE;
+char *janus_log_global_prefix = NULL;
 int lock_debug = 0;
 #ifdef REFCOUNT_DEBUG
 int refcount_debug = 1;
@@ -603,7 +604,8 @@ static gboolean janus_check_sessions(gpointer user_data) {
 				}
 				/* Notify event handlers as well */
 				if(janus_events_is_enabled())
-					janus_events_notify_handlers(JANUS_EVENT_TYPE_SESSION, session->session_id, "timeout", NULL);
+					janus_events_notify_handlers(JANUS_EVENT_TYPE_SESSION, JANUS_EVENT_SUBTYPE_NONE,
+						session->session_id, "timeout", NULL);
 
 				/* FIXME Is this safe? apparently it causes hash table errors on the console */
 				g_hash_table_iter_remove(&iter);
@@ -981,7 +983,8 @@ int janus_process_incoming_request(janus_request *request) {
 			memset(id, 0, sizeof(id));
 			g_snprintf(id, sizeof(id), "%p", session->source->instance);
 			json_object_set_new(transport, "id", json_string(id));
-			janus_events_notify_handlers(JANUS_EVENT_TYPE_SESSION, session_id, "created", transport);
+			janus_events_notify_handlers(JANUS_EVENT_TYPE_SESSION, JANUS_EVENT_SUBTYPE_NONE,
+				session_id, "created", transport);
 		}
 		/* Prepare JSON reply */
 		json_t *reply = janus_create_message("success", 0, transaction_text);
@@ -1117,7 +1120,8 @@ int janus_process_incoming_request(janus_request *request) {
 		ret = janus_process_success(request, reply);
 		/* Notify event handlers as well */
 		if(janus_events_is_enabled())
-			janus_events_notify_handlers(JANUS_EVENT_TYPE_SESSION, session_id, "destroyed", NULL);
+			janus_events_notify_handlers(JANUS_EVENT_TYPE_SESSION, JANUS_EVENT_SUBTYPE_NONE,
+				session_id, "destroyed", NULL);
 	} else if(!strcasecmp(message_text, "detach")) {
 		if(handle == NULL) {
 			/* Query is an handle-level command */
@@ -1273,7 +1277,7 @@ int janus_process_incoming_request(janus_request *request) {
 			}
 			/* Notify event handlers */
 			if(janus_events_is_enabled()) {
-				janus_events_notify_handlers(JANUS_EVENT_TYPE_JSEP,
+				janus_events_notify_handlers(JANUS_EVENT_TYPE_JSEP, JANUS_EVENT_SUBTYPE_NONE,
 					session_id, handle_id, handle->opaque_id, "remote", jsep_type, jsep_sdp);
 			}
 			JANUS_LOG(LOG_VERB, "[%"SCNu64"] There are %d audio, %d video and %d data m-lines\n",
@@ -2157,7 +2161,8 @@ int janus_process_incoming_admin_request(janus_request *request) {
 			json_t *data = json_object_get(root, "data");
 			if(janus_events_is_enabled()) {
 				json_incref(data);
-				janus_events_notify_handlers(JANUS_EVENT_TYPE_EXTERNAL, 0, schema_value, data);
+				janus_events_notify_handlers(JANUS_EVENT_TYPE_EXTERNAL, JANUS_EVENT_SUBTYPE_NONE,
+					0, schema_value, data);
 			}
 			/* Prepare JSON reply */
 			json_t *reply = json_object();
@@ -2439,7 +2444,8 @@ int janus_process_incoming_admin_request(janus_request *request) {
 			ret = janus_process_success(request, reply);
 			/* Notify event handlers as well */
 			if(janus_events_is_enabled())
-				janus_events_notify_handlers(JANUS_EVENT_TYPE_SESSION, session_id, "destroyed", NULL);
+				janus_events_notify_handlers(JANUS_EVENT_TYPE_SESSION, JANUS_EVENT_SUBTYPE_NONE,
+					session_id, "destroyed", NULL);
 			goto jsondone;
 		}
 		/* If this is not a request to destroy a session, it must be a request to list the handles */
@@ -3019,7 +3025,7 @@ void janus_transport_notify_event(janus_transport *plugin, void *transport, json
 		return;
 	/* Notify event handlers */
 	if(janus_events_is_enabled()) {
-		janus_events_notify_handlers(JANUS_EVENT_TYPE_TRANSPORT,
+		janus_events_notify_handlers(JANUS_EVENT_TYPE_TRANSPORT, JANUS_EVENT_SUBTYPE_NONE,
 			0, plugin->get_package(), transport, event);
 	} else {
 		json_decref(event);
@@ -3206,7 +3212,7 @@ int janus_plugin_push_event(janus_plugin_session *plugin_session, janus_plugin *
 			const char *merged_sdp_type = json_string_value(json_object_get(merged_jsep, "type"));
 			const char *merged_sdp = json_string_value(json_object_get(merged_jsep, "sdp"));
 			/* Notify event handlers as well */
-			janus_events_notify_handlers(JANUS_EVENT_TYPE_JSEP,
+			janus_events_notify_handlers(JANUS_EVENT_TYPE_JSEP, JANUS_EVENT_SUBTYPE_NONE,
 				session->session_id, handle->handle_id, handle->opaque_id, "local", merged_sdp_type, merged_sdp);
 		}
 	}
@@ -3686,7 +3692,7 @@ void janus_plugin_notify_event(janus_plugin *plugin, janus_plugin_session *plugi
 	}
 	/* Notify event handlers */
 	if(janus_events_is_enabled()) {
-		janus_events_notify_handlers(JANUS_EVENT_TYPE_PLUGIN,
+		janus_events_notify_handlers(JANUS_EVENT_TYPE_PLUGIN, JANUS_EVENT_SUBTYPE_NONE,
 			session_id, handle_id, opaque_id, plugin->get_package(), event);
 	} else {
 		json_decref(event);
@@ -3763,6 +3769,11 @@ gint main(int argc, char *argv[])
 	janus_config_category *config_plugins = janus_config_get_create(config, NULL, janus_config_type_category, "plugins");
 	janus_config_category *config_events = janus_config_get_create(config, NULL, janus_config_type_category, "events");
 	janus_config_category *config_loggers = janus_config_get_create(config, NULL, janus_config_type_category, "loggers");
+
+	/* Any log prefix? */
+	janus_config_array *lp = janus_config_get(config, config_general, janus_config_type_item, "log_prefix");
+	if(lp && lp->value)
+		janus_log_global_prefix = g_strdup(lp->value);
 
 	/* Check if there are folders to protect */
 	janus_config_array *pfs = janus_config_get(config, config_general, janus_config_type_array, "protected_folders");
@@ -3907,7 +3918,7 @@ gint main(int argc, char *argv[])
 	dir = opendir(path);
 	if(!dir) {
 		/* Not really fatal, we don't care and go on anyway: loggers are not fundamental */
-		JANUS_LOG(LOG_FATAL, "\tCouldn't access logger plugins folder...\n");
+		JANUS_LOG(LOG_WARN, "\tCouldn't access logger plugins folder...\n");
 	} else {
 		/* Any loggers to ignore? */
 		item = janus_config_get(config, config_loggers, janus_config_type_item, "disable");
@@ -4659,7 +4670,7 @@ gint main(int argc, char *argv[])
 		dir = opendir(path);
 		if(!dir) {
 			/* Not really fatal, we don't care and go on anyway: event handlers are not fundamental */
-			JANUS_LOG(LOG_FATAL, "\tCouldn't access event handler plugins folder...\n");
+			JANUS_LOG(LOG_WARN, "\tCouldn't access event handler plugins folder...\n");
 		} else {
 			item = janus_config_get(config, config_events, janus_config_type_item, "stats_period");
 			if(item && item->value) {
@@ -5057,7 +5068,7 @@ gint main(int argc, char *argv[])
 		json_t *info = json_object();
 		json_object_set_new(info, "status", json_string("started"));
 		json_object_set_new(info, "info", janus_info(NULL));
-		janus_events_notify_handlers(JANUS_EVENT_TYPE_CORE, 0, info);
+		janus_events_notify_handlers(JANUS_EVENT_TYPE_CORE, JANUS_EVENT_SUBTYPE_CORE_STARTUP, 0, info);
 	}
 
 	while(!g_atomic_int_get(&stop)) {
@@ -5070,7 +5081,7 @@ gint main(int argc, char *argv[])
 		json_t *info = json_object();
 		json_object_set_new(info, "status", json_string("shutdown"));
 		json_object_set_new(info, "signum", json_integer(stop_signal));
-		janus_events_notify_handlers(JANUS_EVENT_TYPE_CORE, 0, info);
+		janus_events_notify_handlers(JANUS_EVENT_TYPE_CORE, JANUS_EVENT_SUBTYPE_CORE_SHUTDOWN, 0, info);
 	}
 
 	/* Done */
@@ -5160,6 +5171,7 @@ gint main(int argc, char *argv[])
 	}
 	janus_mutex_unlock(&counters_mutex);
 #endif
+	g_clear_pointer(&janus_log_global_prefix, g_free);
 
 	JANUS_PRINT("Bye!\n");
 

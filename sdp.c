@@ -805,17 +805,33 @@ int janus_sdp_parse_candidate(void *webrtc, const char *candidate, int trickle) 
 #endif
 				g_strlcpy(c->foundation, rfoundation, NICE_CANDIDATE_MAX_FOUNDATION);
 				c->priority = rpriority;
-				nice_address_set_from_string(&c->addr, rip);
+				gboolean added = nice_address_set_from_string(&c->addr, rip);
+				if(!added) {
+					JANUS_LOG(LOG_WARN, "[%"SCNu64"]    Invalid address '%s', skipping %s candidate (%s)\n",
+						handle->handle_id, rip, rtype, candidate);
+					nice_candidate_free(c);
+					return 0;
+				}
 				nice_address_set_port(&c->addr, rport);
 				c->username = g_strdup(pc->ruser);
 				c->password = g_strdup(pc->rpass);
 				if(c->type == NICE_CANDIDATE_TYPE_SERVER_REFLEXIVE || c->type == NICE_CANDIDATE_TYPE_PEER_REFLEXIVE) {
-					nice_address_set_from_string(&c->base_addr, rrelip);
-					nice_address_set_port(&c->base_addr, rrelport);
+					added = nice_address_set_from_string(&c->base_addr, rrelip);
+					if(added)
+						nice_address_set_port(&c->base_addr, rrelport);
+
 				} else if(c->type == NICE_CANDIDATE_TYPE_RELAYED) {
 					/* FIXME Do we really need the base address for TURN? */
-					nice_address_set_from_string(&c->base_addr, rrelip);
-					nice_address_set_port(&c->base_addr, rrelport);
+					added = nice_address_set_from_string(&c->base_addr, rrelip);
+					if(added)
+						nice_address_set_port(&c->base_addr, rrelport);
+
+				}
+				if(!added) {
+					JANUS_LOG(LOG_WARN, "[%"SCNu64"]    Invalid base address '%s', skipping %s candidate (%s)\n",
+						handle->handle_id, rrelip, rtype, candidate);
+					nice_candidate_free(c);
+					return 0;
 				}
 				pc->candidates = g_slist_append(pc->candidates, c);
 				JANUS_LOG(LOG_HUGE, "[%"SCNu64"]    Candidate added to the list! (%u elements for %d/%d)\n", handle->handle_id,
@@ -829,7 +845,8 @@ int janus_sdp_parse_candidate(void *webrtc, const char *candidate, int trickle) 
 					json_object_set_new(info, "remote-candidate", json_string(candidate));
 					json_object_set_new(info, "stream_id", json_integer(pc->stream_id));
 					json_object_set_new(info, "component_id", json_integer(pc->component_id));
-					janus_events_notify_handlers(JANUS_EVENT_TYPE_WEBRTC, session->session_id, handle->handle_id, handle->opaque_id, info);
+					janus_events_notify_handlers(JANUS_EVENT_TYPE_WEBRTC, JANUS_EVENT_SUBTYPE_WEBRTC_RCAND,
+						session->session_id, handle->handle_id, handle->opaque_id, info);
 				}
 				/* See if we need to process this */
 				if(trickle) {
@@ -843,7 +860,7 @@ int janus_sdp_parse_candidate(void *webrtc, const char *candidate, int trickle) 
 							GSList *candidates = NULL;
 							candidates = g_slist_append(candidates, c);
 							if(nice_agent_set_remote_candidates(handle->agent, pc->stream_id, pc->component_id, candidates) < 1) {
-								JANUS_LOG(LOG_ERR, "[%"SCNu64"] Failed to add trickle candidate :-(\n", handle->handle_id);
+								JANUS_LOG(LOG_ERR, "[%"SCNu64"] Failed to add trickle candidate :-( (%s)\n", handle->handle_id, candidate);
 							} else {
 								JANUS_LOG(LOG_HUGE, "[%"SCNu64"] Trickle candidate added!\n", handle->handle_id);
 							}

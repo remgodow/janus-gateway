@@ -664,7 +664,8 @@ static void janus_ice_notify_media(janus_handle *handle, char *mid, gboolean vid
 		json_object_set_new(info, "receiving", up ? json_true() : json_false());
 		if(!up && no_media_timer > 1)
 			json_object_set_new(info, "seconds", json_integer(no_media_timer));
-		janus_events_notify_handlers(JANUS_EVENT_TYPE_MEDIA, session->session_id, handle->handle_id, handle->opaque_id, info);
+		janus_events_notify_handlers(JANUS_EVENT_TYPE_MEDIA, JANUS_EVENT_SUBTYPE_MEDIA_STATE,
+			session->session_id, handle->handle_id, handle->opaque_id, info);
 	}
 }
 
@@ -693,7 +694,8 @@ void janus_ice_notify_hangup(janus_handle *handle, const char *reason) {
 		json_object_set_new(info, "connection", json_string("hangup"));
 		if(reason != NULL)
 			json_object_set_new(info, "reason", json_string(reason));
-		janus_events_notify_handlers(JANUS_EVENT_TYPE_WEBRTC, session->session_id, handle->handle_id, handle->opaque_id, info);
+		janus_events_notify_handlers(JANUS_EVENT_TYPE_WEBRTC, JANUS_EVENT_SUBTYPE_WEBRTC_STATE,
+			session->session_id, handle->handle_id, handle->opaque_id, info);
 	}
 }
 
@@ -859,8 +861,8 @@ int janus_ice_test_stun_server(janus_network_address *addr, uint16_t port,
 		return -1;
 	}
 	struct sockaddr *address = NULL, *remote = NULL;
-	struct sockaddr_in address4, remote4;
-	struct sockaddr_in6 address6, remote6;
+	struct sockaddr_in address4 = { 0 }, remote4 = { 0 };
+	struct sockaddr_in6 address6 = { 0 }, remote6 = { 0 };
 	socklen_t addrlen = 0;
 	if(addr->family == AF_INET) {
 		memset(&address4, 0, sizeof(address4));
@@ -1229,7 +1231,7 @@ gint janus_handle_attach_plugin(void *core_session, janus_handle *handle, janus_
 	}
 	/* Notify event handlers */
 	if(janus_events_is_enabled())
-		janus_events_notify_handlers(JANUS_EVENT_TYPE_HANDLE,
+		janus_events_notify_handlers(JANUS_EVENT_TYPE_HANDLE, JANUS_EVENT_SUBTYPE_NONE,
 			session->session_id, handle->handle_id, "attached", plugin->get_package(), handle->opaque_id);
 	return 0;
 }
@@ -1651,7 +1653,8 @@ janus_slow_link_update(janus_handle_webrtc_medium *medium, janus_handle *handle,
 				json_object_set_new(info, "media", json_string(video ? "video" : "audio"));
 				json_object_set_new(info, "slow_link", json_string(uplink ? "uplink" : "downlink"));
 				json_object_set_new(info, "lost_lastsec", json_integer(sl_lost_recently));
-				janus_events_notify_handlers(JANUS_EVENT_TYPE_MEDIA, session->session_id, handle->handle_id, handle->opaque_id, info);
+				janus_events_notify_handlers(JANUS_EVENT_TYPE_MEDIA, JANUS_EVENT_SUBTYPE_MEDIA_SLOWLINK,
+					session->session_id, handle->handle_id, handle->opaque_id, info);
 			}
 		}
 	}
@@ -1761,7 +1764,8 @@ static void janus_ice_cb_component_state_changed(NiceAgent *agent, guint stream_
 		json_object_set_new(info, "ice", json_string(janus_get_ice_state_name(state)));
 		json_object_set_new(info, "stream_id", json_integer(stream_id));
 		json_object_set_new(info, "component_id", json_integer(component_id));
-		janus_events_notify_handlers(JANUS_EVENT_TYPE_WEBRTC, session->session_id, handle->handle_id, handle->opaque_id, info);
+		janus_events_notify_handlers(JANUS_EVENT_TYPE_WEBRTC, JANUS_EVENT_SUBTYPE_WEBRTC_ICE,
+			session->session_id, handle->handle_id, handle->opaque_id, info);
 	}
 	/* FIXME Even in case the state is 'connected', we wait for the 'new-selected-pair' callback to do anything */
 	if(state == NICE_COMPONENT_STATE_FAILED) {
@@ -1888,7 +1892,8 @@ static void janus_ice_cb_new_selected_pair (NiceAgent *agent, guint stream_id, g
 #endif
 		json_object_set_new(info, "stream_id", json_integer(stream_id));
 		json_object_set_new(info, "component_id", json_integer(component_id));
-		janus_events_notify_handlers(JANUS_EVENT_TYPE_WEBRTC, session->session_id, handle->handle_id, handle->opaque_id, info);
+		janus_events_notify_handlers(JANUS_EVENT_TYPE_WEBRTC, JANUS_EVENT_SUBTYPE_WEBRTC_PAIR,
+			session->session_id, handle->handle_id, handle->opaque_id, info);
 	}
 	/* Have we been here before? (might happen, when trickling) */
 	if(pc->ice_connected > 0)
@@ -2969,7 +2974,8 @@ static int janus_ice_candidate_to_string(janus_handle *handle, NiceCandidate *c,
 			json_object_set_new(info, "local-candidate", json_string(buffer));
 			json_object_set_new(info, "stream_id", json_integer(pc->stream_id));
 			json_object_set_new(info, "component_id", json_integer(pc->component_id));
-			janus_events_notify_handlers(JANUS_EVENT_TYPE_WEBRTC, session->session_id, handle->handle_id, handle->opaque_id, info);
+			janus_events_notify_handlers(JANUS_EVENT_TYPE_WEBRTC, JANUS_EVENT_SUBTYPE_WEBRTC_LCAND,
+				session->session_id, handle->handle_id, handle->opaque_id, info);
 		}
 	}
 	return 0;
@@ -3586,7 +3592,7 @@ static gboolean janus_ice_outgoing_stats_handle(gpointer user_data) {
 						json_object_set_new(info, "nacks-received", json_integer(medium->in_stats.info[vindex].nacks));
 						json_object_set_new(info, "nacks-sent", json_integer(medium->out_stats.info[vindex].nacks));
 						json_object_set_new(info, "retransmissions-received", json_integer(medium->rtcp_ctx[vindex]->retransmitted));
-						janus_events_notify_handlers(JANUS_EVENT_TYPE_MEDIA, session->session_id, handle->handle_id, handle->opaque_id, info);
+						janus_events_notify_handlers(JANUS_EVENT_TYPE_MEDIA, JANUS_EVENT_SUBTYPE_MEDIA_STATS, session->session_id, handle->handle_id, handle->opaque_id, info);
 					}
 				}
 			}
@@ -3691,7 +3697,7 @@ static gboolean janus_ice_outgoing_traffic_handle(janus_handle *handle, janus_ic
 		janus_session_notify_event(session, event);
 		/* Notify event handlers as well */
 		if(janus_events_is_enabled())
-			janus_events_notify_handlers(JANUS_EVENT_TYPE_HANDLE,
+			janus_events_notify_handlers(JANUS_EVENT_TYPE_HANDLE, JANUS_EVENT_SUBTYPE_NONE,
 				session->session_id, handle->handle_id, "detached",
 				plugin ? plugin->get_package() : NULL, handle->opaque_id);
 		return G_SOURCE_REMOVE;
@@ -4377,6 +4383,7 @@ void janus_handle_dtls_handshake_done(janus_handle *handle) {
 	if(janus_events_is_enabled()) {
 		json_t *info = json_object();
 		json_object_set_new(info, "connection", json_string("webrtcup"));
-		janus_events_notify_handlers(JANUS_EVENT_TYPE_WEBRTC, session->session_id, handle->handle_id, handle->opaque_id, info);
+		janus_events_notify_handlers(JANUS_EVENT_TYPE_WEBRTC, JANUS_EVENT_SUBTYPE_WEBRTC_STATE,
+			session->session_id, handle->handle_id, handle->opaque_id, info);
 	}
 }

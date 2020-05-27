@@ -2024,6 +2024,11 @@ void janus_sip_destroy_session(janus_plugin_session *handle, int *error) {
 			session->master = NULL;
 		}
 	}
+	/* If this session was involved in a transfer, get rid of the reference */
+	if(session->refer_id) {
+		g_hash_table_remove(transfers, GUINT_TO_POINTER(session->refer_id));
+		session->refer_id = 0;
+	}
 	/* Shutdown the NUA */
 	if(session->stack && session->stack->s_nua)
 		nua_shutdown(session->stack->s_nua);
@@ -3287,16 +3292,15 @@ static void *janus_sip_handler(void *data) {
 				janus_mutex_lock(&sessions_mutex);
 				janus_sip_transfer *transfer = g_hash_table_lookup(transfers, GUINT_TO_POINTER(refer_id));
 				janus_mutex_unlock(&sessions_mutex);
-				if(transfer != NULL && transfer->nh_s != NULL) {
-					/* Send a 202 */
-					nua_respond(transfer->nh_s, 202, sip_status_phrase(202),
-						NUTAG_WITH_SAVED(transfer->saved), TAG_END());
-					JANUS_LOG(LOG_VERB, "[%p] 202\n", transfer->nh_s);
+				if(transfer != NULL) {
+					if(session->refer_id > 0 && session->refer_id != refer_id) {
+						janus_mutex_lock(&sessions_mutex);
+						g_hash_table_remove(transfers, GUINT_TO_POINTER(session->refer_id));
+						janus_mutex_unlock(&sessions_mutex);
+					}
 					session->refer_id = refer_id;
 					referred_by = transfer->referred_by ? g_strdup(transfer->referred_by) : NULL;
-				}
-				/* Any custom headers we should include? (e.g., Replaces) */
-				if(transfer->custom_headers != NULL) {
+					/* Any custom headers we should include? (e.g., Replaces) */
 					g_strlcat(custom_headers, transfer->custom_headers, sizeof(custom_headers));
 				}
 			}
@@ -3668,17 +3672,23 @@ static void *janus_sip_handler(void *data) {
 				janus_sip_transfer *transfer = g_hash_table_lookup(transfers, GUINT_TO_POINTER(refer_id));
 				janus_mutex_unlock(&sessions_mutex);
 				if(transfer != NULL && transfer->nh_s != NULL) {
-					/* Send an error response */
-					int response_code = 486;
+					/* Send a NOTIFY with the error code */
+					int response_code = 603;
 					json_t *code_json = json_object_get(root, "code");
 					if(code_json)
 						response_code = json_integer_value(code_json);
 					if(response_code <= 399) {
-						JANUS_LOG(LOG_WARN, "Invalid SIP response code specified, using 486 to decline transfer\n");
-						response_code = 486;
+						JANUS_LOG(LOG_WARN, "Invalid SIP response code specified, using 603 to decline transfer\n");
+						response_code = 603;
 					}
-					nua_respond(transfer->nh_s, response_code, sip_status_phrase(response_code),
-						NUTAG_WITH_SAVED(transfer->saved), TAG_END());
+					char content[100];
+					g_snprintf(content, sizeof(content), "SIP/2.0 %d %s", response_code, sip_status_phrase(response_code));
+					nua_notify(transfer->nh_s,
+						NUTAG_SUBSTATE(nua_substate_terminated),
+						SIPTAG_CONTENT_TYPE_STR("message/sipfrag"),
+						SIPTAG_PAYLOAD_STR(content),
+						NUTAG_WITH_SAVED(transfer->saved),
+						TAG_END());
 					/* Also notify event handlers */
 					if(notify_events && gateway->events_is_enabled()) {
 						json_t *info = json_object();
@@ -3692,8 +3702,14 @@ static void *janus_sip_handler(void *data) {
 					json_object_set_new(result, "event", json_string("declining"));
 					json_object_set_new(result, "refer_id", json_integer(refer_id));
 					json_object_set_new(result, "code", json_integer(response_code));
+					janus_mutex_lock(&sessions_mutex);
+					g_hash_table_remove(transfers, GUINT_TO_POINTER(refer_id));
+					janus_mutex_unlock(&sessions_mutex);
 					goto done;
 				} else {
+					janus_mutex_lock(&sessions_mutex);
+					g_hash_table_remove(transfers, GUINT_TO_POINTER(refer_id));
+					janus_mutex_unlock(&sessions_mutex);
 					JANUS_LOG(LOG_ERR, "Wrong state (no transfer?)\n");
 					error_code = JANUS_SIP_ERROR_WRONG_STATE;
 					g_snprintf(error_cause, 512, "Wrong state (no transfer?)");
@@ -4646,9 +4662,9 @@ void janus_sip_sofia_callback(nua_event_t event, int status, char const *phrase,
 				referred_by = url_as_string(session->stack->s_home, sip->sip_from->a_url);
 			JANUS_LOG(LOG_VERB, "Incoming REFER: %s (by %s, headers: %s)\n",
 				refer_to, referred_by ? referred_by : "unknown", custom_headers ? custom_headers : "unknown");
-			/* Send a 100 back */
-			nua_respond(nh, 100, sip_status_phrase(100), NUTAG_WITH_CURRENT(nua), TAG_END());
-			JANUS_LOG(LOG_VERB, "[%p] 100\n", nh);
+			/* Send a 202 back */
+			nua_respond(nh, 202, sip_status_phrase(202), NUTAG_WITH_CURRENT(nua), TAG_END());
+			JANUS_LOG(LOG_VERB, "[%p] 202\n", nh);
 			/* Take note of the session and NUA handle we got the REFER from (for NOTIFY) */
 			janus_mutex_lock(&sessions_mutex);
 			guint32 refer_id = 0;
@@ -5531,6 +5547,8 @@ void janus_sip_sdp_process(janus_sip_session *session, janus_sdp *sdp, gboolean 
 char *janus_sip_sdp_manipulate(janus_sip_session *session, janus_sdp *sdp, gboolean answer) {
 	if(!session || !session->stack || !sdp)
 		return NULL;
+	GHashTable *codecs = NULL;
+	GList *pts_to_remove = NULL;
 	/* Start replacing stuff */
 	JANUS_LOG(LOG_VERB, "Setting protocol to %s\n", session->media.require_srtp ? "RTP/SAVP" : "RTP/AVP");
 	if(sdp->c_addr) {
@@ -5580,7 +5598,44 @@ char *janus_sip_sdp_manipulate(janus_sip_session *session, janus_sdp *sdp, gbool
 				}
 			}
 		}
+		/* If this is an answer, get rid of multiple versions of the same
+		 * codec as well (e.g., video profiles), as that confuses the hell
+		 * out of SOATAG_RTP_SELECT(SOA_RTP_SELECT_COMMON) in nua_respond() */
+		if(answer) {
+			if(codecs == NULL)
+				codecs = g_hash_table_new_full(g_str_hash, g_str_equal, (GDestroyNotify)g_free, NULL);
+			/* Check all rtpmap attributes */
+			int pt = -1;
+			char codec[50];
+			GList *ma = m->attributes;
+			while(ma) {
+				janus_sdp_attribute *a = (janus_sdp_attribute *)ma->data;
+				if(a->name != NULL && a->value != NULL && !strcasecmp(a->name, "rtpmap")) {
+					if(sscanf(a->value, "%3d %s", &pt, codec) == 2) {
+						if(g_hash_table_lookup(codecs, codec) != NULL) {
+							/* We already have a version of this codec, remove the payload type */
+							pts_to_remove = g_list_append(pts_to_remove, GINT_TO_POINTER(pt));
+							JANUS_LOG(LOG_HUGE, "Removing %d (%s)\n", pt, codec);
+						} else {
+							/* Keep track of this codec */
+							g_hash_table_insert(codecs, g_strdup(codec), GINT_TO_POINTER(pt));
+						}
+					}
+				}
+				ma = ma->next;
+			}
+		}
 		temp = temp->next;
+	}
+	/* If we need to remove some payload types from the SDP, do it now */
+	if(pts_to_remove != NULL) {
+		GList *temp = pts_to_remove;
+		while(temp) {
+			int pt = GPOINTER_TO_INT(temp->data);
+			janus_sdp_remove_payload_type(sdp, pt);
+			temp = temp->next;
+		}
+		g_list_free(pts_to_remove);
 	}
 	/* Generate a SDP string out of our changes */
 	return janus_sdp_write(sdp);

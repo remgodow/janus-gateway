@@ -321,6 +321,15 @@ $(document).ready(function() {
 											// Send DTMF tone (inband)
 											caller.dtmf({dtmf: { tones: $(this).text()}});
 										});
+										// Show the peer and hide the spinner when we get a playing event
+										$('#peervideo' + mid).bind("playing", function () {
+											$('#waitingvideo').remove();
+											if(this.videoWidth)
+												$('#peervideo' + mid).removeClass('hide').show();
+											if(spinner !== null && spinner !== undefined)
+												spinner.stop();
+											spinner = null;
+										});
 									}
 									if(track.kind === "audio") {
 										// New audio track: create a stream out of it, and use a hidden <audio> element
