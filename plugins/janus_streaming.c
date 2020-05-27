@@ -3162,7 +3162,7 @@ static json_t *janus_streaming_process_synchronous_request(janus_streaming_sessi
 				}
 				JANUS_LOG(LOG_VERB, "Audio %s, Video %s\n", doaudio ? "enabled" : "NOT enabled", dovideo ? "enabled" : "NOT enabled");
 			}
-			janus_mutex_unlock(&mountpoints_mutex);
+			
 			mp = janus_streaming_create_rtp_source(
 				mpid, mpid_str,
 				name ? (char *)json_string_value(name) : NULL,

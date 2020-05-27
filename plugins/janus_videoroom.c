@@ -3061,8 +3061,8 @@ int janus_videoroom_init(janus_callbacks *callback, const char *config_path) {
 		/* Compute a list of the supported codecs for the summary */
 		char audio_codecs[100], video_codecs[100];
 		janus_videoroom_codecstr(vr, audio_codecs, video_codecs, sizeof(audio_codecs), "|");
-		JANUS_LOG(LOG_VERB, "  ::: [%s][%s] %"SCNu32", max %d publishers, FIR frequency of %d seconds, %s audio codec(s), %s video codec(s)\n",
-			vr->room_id_str, vr->room_name, vr->bitrate, vr->max_publishers, vr->fir_freq,
+		JANUS_LOG(LOG_VERB, "  ::: [%s][%s] %"SCNu32", max %d publishers, PLI frequency of %d seconds, %s audio codec(s), %s video codec(s)\n",
+			vr->room_id_str, vr->room_name, vr->bitrate, vr->max_publishers, vr->pli_freq,
 			audio_codecs, video_codecs);
 	}
 	janus_mutex_unlock(&rooms_mutex);
@@ -3918,8 +3918,8 @@ static json_t *janus_videoroom_process_synchronous_request(janus_videoroom_sessi
 		g_hash_table_iter_init(&iter, rooms);
 		while (g_hash_table_iter_next(&iter, NULL, &value)) {
 			janus_videoroom *vr = value;
-			JANUS_LOG(LOG_VERB, "  ::: [%s][%s] %"SCNu32", max %d publishers, FIR frequency of %d seconds\n",
-				vr->room_id_str, vr->room_name, vr->bitrate, vr->max_publishers, vr->fir_freq);
+			JANUS_LOG(LOG_VERB, "  ::: [%s][%s] %"SCNu32", max %d publishers, PLI frequency of %d seconds\n",
+				vr->room_id_str, vr->room_name, vr->bitrate, vr->max_publishers, vr->pli_freq);
 		}
 		janus_mutex_unlock(&rooms_mutex);
 		/* Send info back */
