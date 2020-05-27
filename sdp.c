@@ -660,7 +660,7 @@ int janus_sdp_process_local(void *ice_handle, janus_sdp *remote_sdp, gboolean up
 }
 
 typedef struct janus_sdp_mdns_candidate {
-	janus_ice_handle *handle;
+	janus_handle *handle;
 	char *candidate, *local;
 	GCancellable *cancellable;
 } janus_sdp_mdns_candidate;
@@ -686,14 +686,14 @@ static void janus_sdp_mdns_resolved(GObject *source_object, GAsyncResult *res, g
 	}
 	g_resolver_free_addresses(list);
 	g_object_unref(resolver);
-	if(resolved != NULL && mc->handle->stream && mc->handle->app_handle &&
+	if(resolved != NULL && mc->handle->pc && mc->handle->app_handle &&
 			!g_atomic_int_get(&mc->handle->app_handle->stopped) &&
 			!g_atomic_int_get(&mc->handle->destroyed)) {
 		/* Replace the .local address with the resolved one in the candidate string */
 		mc->candidate = janus_string_replace(mc->candidate, mc->local, resolved);
 		/* Parse the candidate again */
 		janus_mutex_lock(&mc->handle->mutex);
-		(void)janus_sdp_parse_candidate(mc->handle->stream, mc->candidate, 1);
+		(void)janus_sdp_parse_candidate(mc->handle->pc, mc->candidate, 1);
 		janus_mutex_unlock(&mc->handle->mutex);
 	}
 	g_free(resolved);
@@ -704,8 +704,8 @@ static void janus_sdp_mdns_resolved(GObject *source_object, GAsyncResult *res, g
 	g_free(mc);
 }
 
-int janus_sdp_parse_candidate(void *ice_stream, const char *candidate, int trickle) {
-	if(ice_stream == NULL || candidate == NULL)
+int janus_sdp_parse_candidate(void *webrtc, const char *candidate, int trickle) {
+	if(webrtc == NULL || candidate == NULL)
 		return -1;
 	janus_handle_webrtc *pc = (janus_handle_webrtc *)webrtc;
 	janus_handle *handle = pc->handle;

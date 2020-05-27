@@ -6563,10 +6563,10 @@ static int janus_streaming_rtsp_connect_to_server(janus_streaming_mountpoint *mp
 	janus_network_address audio_iface, video_iface;
 	uint32_t audio_ssrc = 0, video_ssrc = 0;
 	int vresult;
-	vresult = janus_streaming_rtsp_parse_sdp(curldata->buffer, name, "video", &vpt,
+	vresult = janus_streaming_rtsp_parse_sdp(curldata->buffer, name, "video", vbase, &vpt,
 		vtransport, vhost, vrtpmap, vfmtp, vcontrol, &video_iface, &video_fds);
 	int aresult;
-	aresult = janus_streaming_rtsp_parse_sdp(curldata->buffer, name, "audio", &apt,
+	aresult = janus_streaming_rtsp_parse_sdp(curldata->buffer, name, "audio", abase, &apt,
 		atransport, ahost, artpmap, afmtp, acontrol, &audio_iface, &audio_fds);
 	janus_mutex_unlock(&mountpoints_mutex);
 

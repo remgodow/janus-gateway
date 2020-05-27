@@ -1619,7 +1619,7 @@ static void janus_handle_webrtc_medium_free(const janus_refcount *medium_ref) {
 		g_queue_free(medium->retransmit_buffer);
 		g_hash_table_destroy(medium->retransmit_seqs);
 	}
-    if(medium->pending_nacked_cleanup && g_hash_table_size(stream->pending_nacked_cleanup) > 0) {
+    if(medium->pending_nacked_cleanup && g_hash_table_size(medium->pending_nacked_cleanup) > 0) {
         GHashTableIter iter;
         gpointer val;
         g_hash_table_iter_init(&iter, medium->pending_nacked_cleanup);
@@ -1628,9 +1628,9 @@ static void janus_handle_webrtc_medium_free(const janus_refcount *medium_ref) {
             g_source_destroy(source);
             g_source_unref(source);
         }
-        g_hash_table_destroy(stream->pending_nacked_cleanup);
+        g_hash_table_destroy(medium->pending_nacked_cleanup);
     }
-    stream->pending_nacked_cleanup = NULL;
+    medium->pending_nacked_cleanup = NULL;
 	if(medium->last_seqs[0])
 		janus_seq_list_free(&medium->last_seqs[0]);
 	if(medium->last_seqs[1])

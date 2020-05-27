@@ -5317,7 +5317,7 @@ static void *janus_audiobridge_handler(void *data) {
 					accepted = TRUE;
 					janus_sdp_generate_answer_mline(offer, answer, m,
 						JANUS_SDP_OA_MLINE, JANUS_SDP_AUDIO,
-                        JANUS_SDP_OA_AUDIO_CODEC, janus_audiocodec_name(participant->codec),
+                        JANUS_SDP_OA_CODEC, janus_audiocodec_name(participant->codec),
 						JANUS_SDP_OA_ACCEPT_EXTMAP, JANUS_RTP_EXTMAP_AUDIO_LEVEL,
 						JANUS_SDP_OA_DONE);
 				}
