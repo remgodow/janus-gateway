@@ -93,6 +93,12 @@ gboolean janus_ice_is_full_trickle_enabled(void) {
 	return janus_full_trickle_enabled;
 }
 
+/* mDNS resolution support */
+static gboolean janus_mdns_enabled;
+gboolean janus_ice_is_mdns_enabled(void) {
+	return janus_mdns_enabled;
+}
+
 /* IPv6 support (still mostly WIP) */
 static gboolean janus_ipv6_enabled;
 gboolean janus_ice_is_ipv6_enabled(void) {
@@ -324,14 +330,16 @@ typedef struct janus_nacked_packet {
 	janus_handle_webrtc_medium *medium;
 	int vindex;
 	guint16 seq_number;
+    guint source_id;
 } janus_nacked_packet;
 static gboolean janus_nacked_packet_cleanup(gpointer user_data) {
 	janus_nacked_packet *pkt = (janus_nacked_packet *)user_data;
 
 	if(pkt->medium && pkt->medium->pc && pkt->medium->pc->handle) {
 		JANUS_LOG(LOG_HUGE, "[%"SCNu64"] Cleaning up NACKed packet %"SCNu16" (SSRC %"SCNu32", vindex %d)...\n",
-			pkt->medium->pc->handle->handle_id, pkt->seq_number, pkt->medium->ssrc_peer[pkt->vindex], pkt->vindex);
+                  pkt->medium->pc->handle->handle_id, pkt->seq_number, pkt->medium->ssrc_peer[pkt->vindex], pkt->vindex);
 		g_hash_table_remove(pkt->medium->rtx_nacked[pkt->vindex], GUINT_TO_POINTER(pkt->seq_number));
+        g_hash_table_remove(pkt->medium->pending_nacked_cleanup, GUINT_TO_POINTER(pkt->source_id));
 	}
 
 	return G_SOURCE_REMOVE;
@@ -787,10 +795,12 @@ void janus_trickle_destroy(janus_trickle *trickle) {
 
 
 /* libnice initialization */
-void janus_ice_init(gboolean ice_lite, gboolean ice_tcp, gboolean full_trickle, gboolean ipv6, uint16_t rtp_min_port, uint16_t rtp_max_port) {
+void janus_ice_init(gboolean ice_lite, gboolean ice_tcp, gboolean full_trickle, gboolean ignore_mdns,
+		gboolean ipv6, uint16_t rtp_min_port, uint16_t rtp_max_port) {
 	janus_ice_lite_enabled = ice_lite;
 	janus_ice_tcp_enabled = ice_tcp;
 	janus_full_trickle_enabled = full_trickle;
+	janus_mdns_enabled = !ignore_mdns;
 	janus_ipv6_enabled = ipv6;
 	JANUS_LOG(LOG_INFO, "Initializing ICE stuff (%s mode, ICE-TCP candidates %s, %s-trickle, IPv6 support %s)\n",
 		janus_ice_lite_enabled ? "Lite" : "Full",
@@ -825,6 +835,8 @@ void janus_ice_init(gboolean ice_lite, gboolean ice_tcp, gboolean full_trickle, 
 		JANUS_LOG(LOG_INFO, "ICE port range: %"SCNu16"-%"SCNu16"\n", rtp_range_min, rtp_range_max);
 #endif
 	}
+	if(!janus_mdns_enabled)
+		JANUS_LOG(LOG_WARN, "mDNS resolution disabled, .local candidates will be ignored\n");
 
 	/* We keep track of plugin sessions to avoid problems */
 	plugin_sessions = g_hash_table_new_full(NULL, NULL, NULL, (GDestroyNotify)janus_plugin_session_dereference);
@@ -1607,6 +1619,18 @@ static void janus_handle_webrtc_medium_free(const janus_refcount *medium_ref) {
 		g_queue_free(medium->retransmit_buffer);
 		g_hash_table_destroy(medium->retransmit_seqs);
 	}
+    if(medium->pending_nacked_cleanup && g_hash_table_size(stream->pending_nacked_cleanup) > 0) {
+        GHashTableIter iter;
+        gpointer val;
+        g_hash_table_iter_init(&iter, medium->pending_nacked_cleanup);
+        while(g_hash_table_iter_next(&iter, NULL, &val)) {
+            GSource *source = val;
+            g_source_destroy(source);
+            g_source_unref(source);
+        }
+        g_hash_table_destroy(stream->pending_nacked_cleanup);
+    }
+    stream->pending_nacked_cleanup = NULL;
 	if(medium->last_seqs[0])
 		janus_seq_list_free(&medium->last_seqs[0]);
 	if(medium->last_seqs[1])
@@ -2564,9 +2588,12 @@ static void janus_ice_cb_nice_recv(NiceAgent *agent, guint stream_id, guint comp
 								np->medium = medium;
 								np->seq_number = cur_seq->seq;
 								np->vindex = vindex;
+								if(medium->pending_nacked_cleanup == NULL)
+									medium->pending_nacked_cleanup = g_hash_table_new(NULL, NULL);
 								GSource *timeout_source = g_timeout_source_new_seconds(5);
 								g_source_set_callback(timeout_source, janus_nacked_packet_cleanup, np, (GDestroyNotify)g_free);
-								g_source_attach(timeout_source, handle->mainctx);
+								np->source_id = g_source_attach(timeout_source, handle->mainctx);
+								g_hash_table_insert(medium->pending_nacked_cleanup, GUINT_TO_POINTER(np->source_id), timeout_source);
 								g_source_unref(timeout_source);
 							}
 						} else if(cur_seq->state == SEQ_NACKED  && now - cur_seq->ts > SEQ_NACKED_WAIT) {

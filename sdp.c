@@ -18,6 +18,8 @@
 
 #include <netdb.h>
 
+#include <gio/gio.h>
+
 #include "janus.h"
 #include "ice.h"
 #include "sdp.h"
@@ -563,102 +565,147 @@ int janus_sdp_process_remote(void *ice_handle, janus_sdp *remote_sdp, gboolean u
 
 /* Parse local SDP */
 int janus_sdp_process_local(void *ice_handle, janus_sdp *remote_sdp, gboolean update) {
-	if(!ice_handle || !remote_sdp)
-		return -1;
-	janus_handle *handle = (janus_handle *)ice_handle;
-	janus_handle_webrtc *pc = handle->pc;
-	if(!pc)
-		return -1;
-	janus_handle_webrtc_medium *medium = NULL;
-	/* We only go through m-lines to setup medium instances accordingly */
-	int mlines = -1;
-	GList *temp = remote_sdp->m_lines;
-	while(temp) {
-		mlines++;
-		janus_sdp_mline *m = (janus_sdp_mline *)temp->data;
-		/* Find the internal medium instance */
-		medium = g_hash_table_lookup(pc->media, GINT_TO_POINTER(m->index));
-		if(!medium) {
-			/* We don't have it, create one now */
-			if(m->type == JANUS_SDP_AUDIO)
-				medium = janus_handle_webrtc_medium_create(handle, JANUS_MEDIA_AUDIO);
-			else if(m->type == JANUS_SDP_VIDEO)
-				medium = janus_handle_webrtc_medium_create(handle, JANUS_MEDIA_VIDEO);
-			else if(m->type == JANUS_SDP_APPLICATION && strstr(m->proto, "DTLS/SCTP"))
-				medium = janus_handle_webrtc_medium_create(handle, JANUS_MEDIA_DATA);
-			else
-				medium = janus_handle_webrtc_medium_create(handle, JANUS_MEDIA_DATA);
-		}
-		/* Check if the offer contributed an mid */
-		GList *tempA = m->attributes;
-		while(tempA) {
-			janus_sdp_attribute *a = (janus_sdp_attribute *)tempA->data;
-			if(a->name) {
-				if(!strcasecmp(a->name, "mid")) {
-					/* Found mid attribute */
-					if(medium->mid == NULL) {
-						medium->mid = g_strdup(a->value);
-						if(!g_hash_table_lookup(pc->media_bymid, medium->mid)) {
-							g_hash_table_insert(pc->media_bymid, g_strdup(medium->mid), medium);
-							janus_refcount_increase(&medium->ref);
-						}
-					}
-					if(handle->pc_mid == NULL)
-						handle->pc_mid = g_strdup(a->value);
-				}
-			}
-			tempA = tempA->next;
-		}
-		if(medium->mid == NULL) {
-			/* No mid provided, generate one now */
-			char mid[5];
-			memset(mid, 0, sizeof(mid));
-			g_snprintf(mid, sizeof(mid), "%d", mlines);
-			medium->mid = g_strdup(mid);
-			if(!g_hash_table_lookup(pc->media_bymid, medium->mid)) {
-				g_hash_table_insert(pc->media_bymid, g_strdup(medium->mid), medium);
-				janus_refcount_increase(&medium->ref);
-			}
-		}
-		if(m->direction == JANUS_SDP_INACTIVE) {
-			/* FIXME Reset the local SSRCs and RTCP context */
-			if(medium->ssrc != 0)
-				g_hash_table_remove(pc->media_byssrc, GINT_TO_POINTER(medium->ssrc));
-			medium->ssrc = 0;
-			if(medium->ssrc_rtx != 0)
-				g_hash_table_remove(pc->media_byssrc, GINT_TO_POINTER(medium->ssrc_rtx));
-			medium->ssrc_rtx = 0;
-			int vindex = 0;
-			for(vindex=0; vindex<3; vindex++) {
-				if(medium->rtcp_ctx[vindex]) {
-					int tb = medium->rtcp_ctx[vindex]->tb;
-					memset(medium->rtcp_ctx[vindex], 0, sizeof(janus_rtcp_context));
-					medium->rtcp_ctx[vindex]->tb = tb;
-				}
-			}
-		} else if(m->type != JANUS_SDP_APPLICATION) {
-			if(medium->ssrc == 0) {
-				medium->ssrc = janus_random_uint32();	/* FIXME Should we look for conflicts? */
-				if(janus_flags_is_set(&handle->webrtc_flags, JANUS_HANDLE_WEBRTC_RFC4588_RTX)) {
-					/* Create an SSRC for RFC4588 as well */
-					medium->ssrc_rtx = janus_random_uint32();	/* FIXME Should we look for conflicts? */
-				}
-				/* Update the SSRC-indexed map */
-				g_hash_table_insert(pc->media_byssrc, GINT_TO_POINTER(medium->ssrc), medium);
-				janus_refcount_increase(&medium->ref);
-				if(medium->ssrc_rtx > 0) {
-					g_hash_table_insert(pc->media_byssrc, GINT_TO_POINTER(medium->ssrc_rtx), medium);
-					janus_refcount_increase(&medium->ref);
-				}
-			}
-		}
-		temp = temp->next;
-	}
-	return 0;	/* FIXME Handle errors better */
+    if(!ice_handle || !remote_sdp)
+        return -1;
+    janus_handle *handle = (janus_handle *)ice_handle;
+    janus_handle_webrtc *pc = handle->pc;
+    if(!pc)
+        return -1;
+    janus_handle_webrtc_medium *medium = NULL;
+    /* We only go through m-lines to setup medium instances accordingly */
+    int mlines = -1;
+    GList *temp = remote_sdp->m_lines;
+    while(temp) {
+        mlines++;
+        janus_sdp_mline *m = (janus_sdp_mline *)temp->data;
+        /* Find the internal medium instance */
+        medium = g_hash_table_lookup(pc->media, GINT_TO_POINTER(m->index));
+        if(!medium) {
+            /* We don't have it, create one now */
+            if(m->type == JANUS_SDP_AUDIO)
+                medium = janus_handle_webrtc_medium_create(handle, JANUS_MEDIA_AUDIO);
+            else if(m->type == JANUS_SDP_VIDEO)
+                medium = janus_handle_webrtc_medium_create(handle, JANUS_MEDIA_VIDEO);
+            else if(m->type == JANUS_SDP_APPLICATION && strstr(m->proto, "DTLS/SCTP"))
+                medium = janus_handle_webrtc_medium_create(handle, JANUS_MEDIA_DATA);
+            else
+                medium = janus_handle_webrtc_medium_create(handle, JANUS_MEDIA_DATA);
+        }
+        /* Check if the offer contributed an mid */
+        GList *tempA = m->attributes;
+        while(tempA) {
+            janus_sdp_attribute *a = (janus_sdp_attribute *)tempA->data;
+            if(a->name) {
+                if(!strcasecmp(a->name, "mid")) {
+                    /* Found mid attribute */
+                    if(medium->mid == NULL) {
+                        medium->mid = g_strdup(a->value);
+                        if(!g_hash_table_lookup(pc->media_bymid, medium->mid)) {
+                            g_hash_table_insert(pc->media_bymid, g_strdup(medium->mid), medium);
+                            janus_refcount_increase(&medium->ref);
+                        }
+                    }
+                    if(handle->pc_mid == NULL)
+                        handle->pc_mid = g_strdup(a->value);
+                }
+            }
+            tempA = tempA->next;
+        }
+        if(medium->mid == NULL) {
+            /* No mid provided, generate one now */
+            char mid[5];
+            memset(mid, 0, sizeof(mid));
+            g_snprintf(mid, sizeof(mid), "%d", mlines);
+            medium->mid = g_strdup(mid);
+            if(!g_hash_table_lookup(pc->media_bymid, medium->mid)) {
+                g_hash_table_insert(pc->media_bymid, g_strdup(medium->mid), medium);
+                janus_refcount_increase(&medium->ref);
+            }
+        }
+        if(m->direction == JANUS_SDP_INACTIVE) {
+            /* FIXME Reset the local SSRCs and RTCP context */
+            if(medium->ssrc != 0)
+                g_hash_table_remove(pc->media_byssrc, GINT_TO_POINTER(medium->ssrc));
+            medium->ssrc = 0;
+            if(medium->ssrc_rtx != 0)
+                g_hash_table_remove(pc->media_byssrc, GINT_TO_POINTER(medium->ssrc_rtx));
+            medium->ssrc_rtx = 0;
+            int vindex = 0;
+            for(vindex=0; vindex<3; vindex++) {
+                if(medium->rtcp_ctx[vindex]) {
+                    int tb = medium->rtcp_ctx[vindex]->tb;
+                    memset(medium->rtcp_ctx[vindex], 0, sizeof(janus_rtcp_context));
+                    medium->rtcp_ctx[vindex]->tb = tb;
+                }
+            }
+        } else if(m->type != JANUS_SDP_APPLICATION) {
+            if(medium->ssrc == 0) {
+                medium->ssrc = janus_random_uint32();	/* FIXME Should we look for conflicts? */
+                if(janus_flags_is_set(&handle->webrtc_flags, JANUS_HANDLE_WEBRTC_RFC4588_RTX)) {
+                    /* Create an SSRC for RFC4588 as well */
+                    medium->ssrc_rtx = janus_random_uint32();	/* FIXME Should we look for conflicts? */
+                }
+                /* Update the SSRC-indexed map */
+                g_hash_table_insert(pc->media_byssrc, GINT_TO_POINTER(medium->ssrc), medium);
+                janus_refcount_increase(&medium->ref);
+                if(medium->ssrc_rtx > 0) {
+                    g_hash_table_insert(pc->media_byssrc, GINT_TO_POINTER(medium->ssrc_rtx), medium);
+                    janus_refcount_increase(&medium->ref);
+                }
+            }
+        }
+        temp = temp->next;
+    }
+    return 0;	/* FIXME Handle errors better */
 }
 
-int janus_sdp_parse_candidate(void *webrtc, const char *candidate, int trickle) {
-	if(webrtc == NULL || candidate == NULL)
+typedef struct janus_sdp_mdns_candidate {
+	janus_ice_handle *handle;
+	char *candidate, *local;
+	GCancellable *cancellable;
+} janus_sdp_mdns_candidate;
+static void janus_sdp_mdns_resolved(GObject *source_object, GAsyncResult *res, gpointer user_data) {
+	/* This callback is invoked when the address is resolved */
+	janus_sdp_mdns_candidate *mc = (janus_sdp_mdns_candidate *)user_data;
+	GResolver *resolver = g_resolver_get_default();
+	GError *error = NULL;
+	GList *list = g_resolver_lookup_by_name_finish(resolver, res, &error);
+	if(mc == NULL) {
+		g_resolver_free_addresses(list);
+		g_object_unref(resolver);
+		return;
+	}
+	char *resolved = NULL;
+	if(error != NULL || list == NULL || list->data == NULL) {
+		JANUS_LOG(LOG_WARN, "[%"SCNu64"] Error resolving mDNS address (%s): %s\n",
+			mc->handle->handle_id, mc->local, error ? error->message : "no results");
+	} else {
+		resolved = g_inet_address_to_string((GInetAddress *)list->data);
+		JANUS_LOG(LOG_VERB, "[%"SCNu64"] mDNS address (%s) resolved: %s\n",
+			mc->handle->handle_id, mc->local, resolved);
+	}
+	g_resolver_free_addresses(list);
+	g_object_unref(resolver);
+	if(resolved != NULL && mc->handle->stream && mc->handle->app_handle &&
+			!g_atomic_int_get(&mc->handle->app_handle->stopped) &&
+			!g_atomic_int_get(&mc->handle->destroyed)) {
+		/* Replace the .local address with the resolved one in the candidate string */
+		mc->candidate = janus_string_replace(mc->candidate, mc->local, resolved);
+		/* Parse the candidate again */
+		janus_mutex_lock(&mc->handle->mutex);
+		(void)janus_sdp_parse_candidate(mc->handle->stream, mc->candidate, 1);
+		janus_mutex_unlock(&mc->handle->mutex);
+	}
+	g_free(resolved);
+	/* Get rid of the helper struct */
+	janus_refcount_decrease(&mc->handle->ref);
+	g_free(mc->candidate);
+	g_free(mc->local);
+	g_free(mc);
+}
+
+int janus_sdp_parse_candidate(void *ice_stream, const char *candidate, int trickle) {
+	if(ice_stream == NULL || candidate == NULL)
 		return -1;
 	janus_handle_webrtc *pc = (janus_handle_webrtc *)webrtc;
 	janus_handle *handle = pc->handle;
@@ -688,23 +735,25 @@ int janus_sdp_parse_candidate(void *webrtc, const char *candidate, int trickle) 
 	if(res >= 7) {
 		if(strstr(rip, ".local")) {
 			/* The IP is actually an mDNS address, try to resolve it
-			 * https://tools.ietf.org/html/draft-ietf-rtcweb-mdns-ice-candidates-00 */
-			struct addrinfo *info = NULL;
-			janus_network_address addr;
-			janus_network_address_string_buffer addr_buf;
-			if(getaddrinfo(rip, NULL, NULL, &info) != 0 ||
-					janus_network_address_from_sockaddr(info->ai_addr, &addr) != 0 ||
-					janus_network_address_to_string_buffer(&addr, &addr_buf) != 0) {
-				JANUS_LOG(LOG_WARN, "[%"SCNu64"] Couldn't resolve mDNS address (%s), dropping candidate\n",
-					handle->handle_id, rip);
-				if(info)
-					freeaddrinfo(info);
-				return res;
+			 * https://tools.ietf.org/html/draft-ietf-rtcweb-mdns-ice-candidates-04 */
+			if(!janus_ice_is_mdns_enabled()) {
+				/* ...unless mDNS resolution is disabled, in which case ignore this candidate */
+				JANUS_LOG(LOG_VERB, "[%"SCNu64"] mDNS candidate ignored\n", handle->handle_id);
+				return 0;
 			}
-			freeaddrinfo(info);
-			JANUS_LOG(LOG_VERB, "[%"SCNu64"] mDNS address (%s) resolved: %s\n",
-				handle->handle_id, rip, janus_network_address_string_from_buffer(&addr_buf));
-			g_strlcpy(rip, janus_network_address_string_from_buffer(&addr_buf), sizeof(rip));
+			/* We'll resolve this address asynchronously, in order not to keep this thread busy */
+			JANUS_LOG(LOG_VERB, "[%"SCNu64"] Resolving mDNS address (%s) asynchronously\n",
+				handle->handle_id, rip);
+			janus_sdp_mdns_candidate *mc = g_malloc(sizeof(janus_sdp_mdns_candidate));
+			janus_refcount_increase(&handle->ref);
+			mc->handle = handle;
+			mc->candidate = g_strdup(candidate);
+			mc->local = g_strdup(rip);
+			mc->cancellable = NULL;
+			GResolver *resolver = g_resolver_get_default();
+			g_resolver_lookup_by_name_async(resolver, rip, NULL,
+				(GAsyncReadyCallback)janus_sdp_mdns_resolved, mc);
+			return 0;
 		}
 		/* Add remote candidate */
 		if(rcomponent > 1) {
@@ -819,13 +868,11 @@ int janus_sdp_parse_candidate(void *webrtc, const char *candidate, int trickle) 
 					added = nice_address_set_from_string(&c->base_addr, rrelip);
 					if(added)
 						nice_address_set_port(&c->base_addr, rrelport);
-
 				} else if(c->type == NICE_CANDIDATE_TYPE_RELAYED) {
 					/* FIXME Do we really need the base address for TURN? */
 					added = nice_address_set_from_string(&c->base_addr, rrelip);
 					if(added)
 						nice_address_set_port(&c->base_addr, rrelport);
-
 				}
 				if(!added) {
 					JANUS_LOG(LOG_WARN, "[%"SCNu64"]    Invalid base address '%s', skipping %s candidate (%s)\n",
