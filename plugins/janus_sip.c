@@ -5632,7 +5632,7 @@ char *janus_sip_sdp_manipulate(janus_sip_session *session, janus_sdp *sdp, gbool
 		GList *temp = pts_to_remove;
 		while(temp) {
 			int pt = GPOINTER_TO_INT(temp->data);
-			janus_sdp_remove_payload_type(sdp, pt);
+			janus_sdp_remove_payload_type(sdp, -1, pt);
 			temp = temp->next;
 		}
 		g_list_free(pts_to_remove);

@@ -2065,7 +2065,7 @@ int janus_streaming_init(janus_callbacks *callback, const char *config_path) {
 				/* Streams created, create the actual mountpoint now */
 				janus_streaming_mountpoint *mp = NULL;
 				if((mp = janus_streaming_create_rtp_source(
-						(id && id->value) ? g_ascii_strtoull(id->value, 0, 10) : 0,
+						mpid, (char *)(id ? id->value : NULL),
 						(char *)cat->name, desc ? (char *)desc->value : NULL,
 						streams,
 						ssuite && ssuite->value ? atoi(ssuite->value) : 0,
@@ -3164,7 +3164,7 @@ static json_t *janus_streaming_process_synchronous_request(janus_streaming_sessi
 			}
 			janus_mutex_unlock(&mountpoints_mutex);
 			mp = janus_streaming_create_rtp_source(
-					mpid, mpid_str,
+				mpid, mpid_str,
 				name ? (char *)json_string_value(name) : NULL,
 				desc ? (char *)json_string_value(desc) : NULL,
 				streams,
@@ -5704,7 +5704,7 @@ static int janus_streaming_create_fd(int port, in_addr_t mcast, const janus_netw
 				int mc_all = 0;
 				if((setsockopt(fd, IPPROTO_IP, IP_MULTICAST_ALL, (void*) &mc_all, sizeof(mc_all))) < 0) {
 					JANUS_LOG(LOG_ERR, "[%s] %s listener setsockopt IP_MULTICAST_ALL failed... %d (%s)\n",
-						mountpointname, listenername, errno, strerror(errno));
+						mountpointname, medianame, errno, strerror(errno));
 					close(fd);
 					janus_mutex_unlock(&fd_mutex);
 					return -1;
@@ -5730,7 +5730,7 @@ static int janus_streaming_create_fd(int port, in_addr_t mcast, const janus_netw
 				}
 				if(setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) == -1) {
 					JANUS_LOG(LOG_ERR, "[%s] %s listener IP_ADD_MEMBERSHIP failed... %d (%s)\n",
-						mountpointname, listenername, errno, strerror(errno));
+						mountpointname, medianame, errno, strerror(errno));
 					close(fd);
 					janus_mutex_unlock(&fd_mutex);
 					return -1;
@@ -5758,7 +5758,7 @@ static int janus_streaming_create_fd(int port, in_addr_t mcast, const janus_netw
 			int reuse = 1;
 			if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) == -1) {
 				JANUS_LOG(LOG_ERR, "[%s] %s listener setsockopt SO_REUSEADDR failed... %d (%s)\n",
-					mountpointname, listenername, errno, strerror(errno));
+					mountpointname, medianame, errno, strerror(errno));
 				close(fd);
 				janus_mutex_unlock(&fd_mutex);
 				return -1;
