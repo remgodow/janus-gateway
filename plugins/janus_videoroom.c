@@ -4444,8 +4444,6 @@ static json_t *janus_videoroom_process_synchronous_request(janus_videoroom_sessi
 			srtp_crypto = json_string_value(s_crypto);
 		}
 		/* Look for room and publisher */
-		guint64 room_id = json_integer_value(room);
-		guint64 publisher_id = json_integer_value(pub_id);
 		janus_mutex_lock(&rooms_mutex);
 		janus_videoroom *videoroom = NULL;
 		error_code = janus_videoroom_access_room(root, TRUE, FALSE, &videoroom, error_cause, sizeof(error_cause));
@@ -5637,7 +5635,7 @@ void janus_videoroom_setup_media(janus_plugin_session *handle) {
 				if(notify_events && gateway->events_is_enabled()) {
 					json_t *info = json_object();
 					json_object_set_new(info, "event", json_string("subscribed"));
-					json_object_set_new(info, "room", string_ids ? json_string(p->room_id_str) : json_integer(p->room_id));
+					json_object_set_new(info, "room", string_ids ? json_string(s->room_id_str) : json_integer(s->room_id));
 					/* TODO Fix the event to event handlers, we don't have a single feed anymore */
 					//~ json_object_set_new(info, "feed", json_integer(p->user_id));
 					gateway->notify_event(&janus_videoroom_plugin, session->handle, info);
@@ -6255,7 +6253,7 @@ static void janus_videoroom_hangup_media_internal(janus_plugin_session *handle) 
 				} else {
 					json_t *event = json_object();
 					json_object_set_new(event, "videoroom", json_string("updated"));
-                    json_object_set_new(info, "room", string_ids ? json_string(publisher->room_id_str) : json_integer(publisher->room_id));
+                    json_object_set_new(event, "room", string_ids ? json_string(subscriber->room_id_str) : json_integer(subscriber->room_id));
 					json_t *media = janus_videoroom_subscriber_streams_summary(subscriber, FALSE, NULL);
 					json_object_set_new(event, "streams", media);
 					/* Generate a new offer */
@@ -6271,7 +6269,7 @@ static void janus_videoroom_hangup_media_internal(janus_plugin_session *handle) 
 					if(notify_events && gateway->events_is_enabled()) {
 						json_t *info = json_object();
 						json_object_set_new(info, "event", json_string("updated"));
-	                    json_object_set_new(info, "room", string_ids ? json_string(publisher->room_id_str) : json_integer(publisher->room_id));
+	                    json_object_set_new(info, "room", string_ids ? json_string(subscriber->room_id_str) : json_integer(subscriber->room_id));
 						json_t *media = janus_videoroom_subscriber_streams_summary(subscriber, FALSE, NULL);
 						json_object_set_new(info, "streams", media);
 						json_object_set_new(info, "private_id", json_integer(subscriber->pvt_id));
@@ -6757,7 +6755,7 @@ static void *janus_videoroom_handler(void *data) {
 					feed_id_str = (char *)json_string_value(feed);
 				}
 				json_t *pvt = json_object_get(root, "private_id");
-				guint64 pvt_id = json_integer_value(pvt), feed_id = 0;
+				guint64 pvt_id = json_integer_value(pvt);
 				/* The new way of subscribing is specifying the streams we're interested in */
 				json_t *feeds = json_object_get(root, "streams");
 				gboolean legacy = FALSE;
@@ -7986,7 +7984,7 @@ static void *janus_videoroom_handler(void *data) {
 				/* The user may be interested in an ICE restart */
 				gboolean do_restart = restart ? json_is_true(restart) : FALSE;
 				gboolean do_update = update ? json_is_true(update) : FALSE;
-				if(publisher && (sdp_update || do_restart || do_update)) {
+				if(sdp_update || do_restart || do_update) {
 					/* Negotiate by sending the selected publisher SDP back, and/or force an ICE restart */
 					if(!g_atomic_int_get(&subscriber->answered)) {
 						/* We're still waiting for an answer to a previous offer, postpone this */
@@ -8024,7 +8022,8 @@ static void *janus_videoroom_handler(void *data) {
 				JANUS_VALIDATE_JSON_OBJECT(root, switch_parameters,
 					error_code, error_cause, TRUE,
 					JANUS_VIDEOROOM_ERROR_MISSING_ELEMENT, JANUS_VIDEOROOM_ERROR_INVALID_ELEMENT);
-
+				if(!subscriber->room || g_atomic_int_get(&subscriber->room->destroyed)) {
+					JANUS_LOG(LOG_ERR, "Room Destroyed \n");
 					error_code = JANUS_VIDEOROOM_ERROR_NO_SUCH_ROOM;
 					g_snprintf(error_cause, 512, "No such room");
 					goto error;
@@ -8061,7 +8060,7 @@ static void *janus_videoroom_handler(void *data) {
                     janus_videoroom_publisher *publisher = g_hash_table_lookup(subscriber->room->participants,
                         string_ids ? (gpointer)feed_id_str : (gpointer)&feed_id);
                         janus_mutex_unlock(&subscriber->room->mutex);
-                    if(publisher == NULL || g_atomic_int_get(&publisher->destroyed) || publisher->sdp == NULL) {
+                    if(publisher == NULL || g_atomic_int_get(&publisher->destroyed) || publisher->session->started) {
                         JANUS_LOG(LOG_ERR, "No such feed (%s)\n", feed_id_str);
                         error_code = JANUS_VIDEOROOM_ERROR_NO_SUCH_FEED;
                         g_snprintf(error_cause, 512, "No such feed (%s)", feed_id_str);
